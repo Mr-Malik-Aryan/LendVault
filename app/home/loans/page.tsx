@@ -78,12 +78,17 @@ export default function LoansPage() {
   // Repay state
   const [repayingLoanId, setRepayingLoanId] = useState<string | null>(null);
 
+<<<<<<< HEAD
   // Get contract address from environment variable
   const LENDVAULT_CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_LENDVAULT_CONTRACT_ADDRESS;
 
   if (!LENDVAULT_CONTRACT_ADDRESS) {
     throw new Error("NEXT_PUBLIC_LENDVAULT_CONTRACT_ADDRESS is not set in environment variables");
   }
+=======
+  // YOUR DEPLOYED CONTRACT ADDRESS - UPDATE THIS!
+  const LENDVAULT_CONTRACT_ADDRESS = "0xd8b934580fcE35a11B58C6D73aDeE468a2833fa8"; // TODO: Replace with your deployed contract
+>>>>>>> 4029f26 (Update loan repayment and investment components)
 
   // Interest rate options
   const interestRateOptions = [
