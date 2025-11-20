@@ -139,10 +139,19 @@ export default function LoansPage() {
       toast.error("User wallet address not found. Please reconnect your wallet.");
       return;
     }
-    if (!loanAmount || parseFloat(loanAmount) <= 0) {
+    if (!loanAmount || loanAmount === "0") {
       toast.error("Please enter a valid loan amount");
       return;
     }
+    
+    // Validate it's a valid number
+    try {
+      BigInt(loanAmount);
+    } catch {
+      toast.error("Please enter a valid wei amount (must be a number)");
+      return;
+    }
+    
     if (!selectedNFT) {
       toast.error("Please select an NFT as collateral");
       return;
@@ -152,26 +161,23 @@ export default function LoansPage() {
       return;
     }
 
-    // Get collateral value
-    const collateralValue = parseFloat(
-      selectedNFT.metadata.attributes?.find((attr: any) => 
-        attr.trait_type?.toLowerCase().includes('value') || 
-        attr.trait_type?.toLowerCase().includes('rarity')
-      )?.value || "0"
+    // Get collateral value in Wei (NFT attributes now store Wei values)
+    const collateralValueWei = BigInt(
+      selectedNFT.metadata.attributes?.[0]?.value || "0"
     );
 
-    if (collateralValue === 0) {
+    if (collateralValueWei === BigInt(0)) {
       toast.error("Selected NFT must have a value attribute");
       return;
     }
 
-    // Validate 80% LTV
-    const loanAmountFloat = parseFloat(loanAmount);
-    const maxLoanAmount = collateralValue * 0.8;
+    // Calculate max loan amount (80% LTV) - all in Wei
+    const loanAmountWei = BigInt(loanAmount);
+    const maxLoanAmountWei = (collateralValueWei * BigInt(80)) / BigInt(100); // 80% LTV
 
-    if (loanAmountFloat > maxLoanAmount) {
+    if (loanAmountWei > maxLoanAmountWei) {
       toast.error(
-        `Loan amount cannot exceed 80% of collateral value. Maximum: ${maxLoanAmount.toFixed(4)} ETH`
+        `Loan amount cannot exceed 80% of collateral value. Maximum: ${maxLoanAmountWei.toString()} Wei`
       );
       return;
     }
@@ -273,19 +279,19 @@ export default function LoansPage() {
         signer
       );
 
-      // Convert values to wei and proper formats
-      const requestedAmountWei = ethers.parseEther(loanAmount);
-      const collateralValueWei = ethers.parseEther(collateralValue.toString());
+      // Convert values to proper formats
+      const requestedAmountWei = BigInt(loanAmount); // Already in Wei
+      const collateralValueWeiForContract = collateralValueWei; // Already in Wei from NFT attributes
       const interestRateBps = parseInt(interestRate) * 100; // Convert to basis points (5% = 500)
       const durationSeconds = parseInt(duration) * 24 * 60 * 60;
 
       console.log("Creating loan offer with params:", {
         nftContract: selectedNFT.contractAddress,
         tokenId: selectedNFT.tokenId,
-        requestedAmount: loanAmount + " ETH",
+        requestedAmount: loanAmount + " Wei",
         interestRate: interestRateBps + " bps",
         duration: durationSeconds + " seconds",
-        collateralValue: collateralValue + " ETH"
+        collateralValue: collateralValueWeiForContract.toString() + " Wei"
       });
 
       // Create loan offer transaction
@@ -295,7 +301,7 @@ export default function LoansPage() {
         requestedAmountWei,
         interestRateBps,
         durationSeconds,
-        collateralValueWei
+        collateralValueWeiForContract
       );
 
       setTxHash(createTx.hash);
@@ -330,12 +336,12 @@ export default function LoansPage() {
       
       const loanData = {
         walletAddress: user?.walletAddress,
-        amount: loanAmount,
+        amount: loanAmount, // Already in Wei
         interestRate: interestRate,
         duration: durationSeconds.toString(),
         collateralType: "NFT",
         collateralId: selectedNFT.tokenId.toString(),
-        collateralValue: collateralValue.toString(),
+        collateralValue: collateralValueWeiForContract.toString(), // In Wei
         dueDate: dueDate.toISOString(),
         collateralContractAddress: selectedNFT.contractAddress,
         network: "sepolia",
@@ -385,6 +391,17 @@ export default function LoansPage() {
       }
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  // Small helper to format large Wei numbers with commas for readability
+  const formatWei = (raw: string | number) => {
+    try {
+      const s = String(raw ?? "0");
+      const digits = s.replace(/[^0-9]/g, "") || "0";
+      return digits.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+    } catch {
+      return String(raw);
     }
   };
 
@@ -480,8 +497,8 @@ export default function LoansPage() {
               {loans.map((loan: any) => (
                 <div key={loan.id} className="bg-card border border-border rounded-lg p-6 hover:border-primary/50 transition-colors">
                   <div className="flex justify-between items-start mb-4">
-                    <h3 className="text-2xl font-bold text-foreground">
-                      {loan.amount} ETH
+                    <h3 className="text-xl font-bold text-foreground font-mono">
+                      {loan.amount} Wei
                     </h3>
                     <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
                       loan.status === 'ACTIVE' ? 'bg-primary/10 text-primary' :
@@ -508,7 +525,7 @@ export default function LoansPage() {
                     </div>
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Collateral Value:</span>
-                      <span className="text-foreground font-medium">{loan.collateralValue} ETH</span>
+                      <span className="text-foreground font-medium font-mono">{loan.collateralValue} Wei</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Due Date:</span>
@@ -598,27 +615,26 @@ export default function LoansPage() {
                   {/* Loan Amount */}
                   <div>
                     <label className="block text-sm font-medium text-foreground mb-2">
-                      Loan Amount (ETH) <span className="text-destructive">*</span>
+                      Loan Amount (Wei) <span className="text-destructive">*</span>
                     </label>
                     <input
-                      type="number"
-                      step="0.01"
-                      min="0"
+                      type="text"
                       value={loanAmount}
                       onChange={(e) => setLoanAmount(e.target.value)}
-                      className="w-full px-4 py-2 bg-background border border-input rounded-lg text-foreground focus:ring-2 focus:ring-ring outline-none"
-                      placeholder="Enter amount in ETH"
+                      className="w-full px-4 py-2 bg-background border border-input rounded-lg text-foreground focus:ring-2 focus:ring-ring outline-none font-mono"
+                      placeholder="Enter amount in Wei (e.g., 1000000000000000000 = 1 ETH)"
                       required
                       disabled={submitting}
                     />
                     {selectedNFT && (
                       <p className="text-xs text-muted-foreground mt-2">
-                        💡 Maximum loan amount: {(parseFloat(
-                          selectedNFT.metadata.attributes?.find((attr: any) => 
-                            attr.trait_type?.toLowerCase().includes('value') || 
-                            attr.trait_type?.toLowerCase().includes('rarity')
-                          )?.value || "0"
-                        ) * 0.8).toFixed(4)} ETH (80% of collateral value)
+                        💡 Maximum loan amount: {(() => {
+                          console.log(selectedNFT)
+                          const nftValueWei = BigInt(
+                            selectedNFT.metadata.attributes?.[0]?.value || "0"
+                          );
+                          return ((nftValueWei * BigInt(80)) / BigInt(100)).toString();
+                        })()} Wei (80% of collateral value)
                       </p>
                     )}
                   </div>
@@ -707,11 +723,10 @@ export default function LoansPage() {
                     ) : (
                       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 max-h-96 overflow-y-auto p-2">
                         {nfts.map((nft, index) => {
-                          const valueAttribute = nft.metadata.attributes?.find((attr: any) => 
-                            attr.trait_type?.toLowerCase().includes('value') || 
-                            attr.trait_type?.toLowerCase().includes('rarity')
-                          );
-                          const ethValue = valueAttribute?.value || '0';
+                          const valueAttribute = nft.metadata.attributes?.[0]?.value|| 0;
+                          // NFT metadata value is stored in Wei
+                          const weiValue = valueAttribute
+                          const formattedWei = formatWei(weiValue);
                           const isSelected = selectedNFT?.tokenId === nft.tokenId && selectedNFT?.contractAddress === nft.contractAddress;
                           
                           return (
@@ -741,7 +756,7 @@ export default function LoansPage() {
                                 <p className="text-white text-xs font-semibold truncate">
                                   {nft.metadata.name || `#${nft.tokenId}`}
                                 </p>
-                                <p className="text-gray-400 text-xs">{ethValue} ETH</p>
+                                <p className="text-gray-400 text-xs">{formattedWei} Wei</p>
                               </div>
                             </div>
                           );
@@ -766,10 +781,10 @@ export default function LoansPage() {
                           <p className="font-medium text-foreground">{selectedNFT.metadata.name}</p>
                           <p className="text-sm text-muted-foreground">Token ID: {selectedNFT.tokenId}</p>
                           <p className="text-sm text-primary font-semibold">
-                            Value: {selectedNFT.metadata.attributes?.find((attr: any) => 
-                              attr.trait_type?.toLowerCase().includes('value') || 
-                              attr.trait_type?.toLowerCase().includes('rarity')
-                            )?.value || '0'} ETH
+                            Value: {(() => {
+                              const v = selectedNFT.metadata.attributes?.[0]?.value || 0;
+                              return `${formatWei(String(v))} Wei`;
+                            })()}
                           </p>
                         </div>
                       </div>

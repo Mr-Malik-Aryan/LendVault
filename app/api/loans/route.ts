@@ -41,6 +41,34 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    // Fetch all loans
+    const allLoans = await prisma.loan.findMany({
+      orderBy: {
+        createdAt: "desc",
+      },
+      include: {
+        borrower: {
+          select: {
+            id: true,
+            username: true,
+            walletAddress: true,
+            reputation: true,
+          },
+        },
+        lender: {
+          select: {
+            id: true,
+            username: true,
+            walletAddress: true,
+            reputation: true,
+          },
+        },
+      },
+    });
+
+    console.log(`[API /loans] Found ${allLoans.length} total loans in database`);
+    console.log(`[API /loans] User ID: ${user.id}`);
+
     // Fetch loans where user is borrower
     const borrowedLoans = await prisma.loan.findMany({
       where: {
@@ -52,14 +80,18 @@ export async function GET(request: NextRequest) {
       include: {
         borrower: {
           select: {
+            id: true,
             username: true,
             walletAddress: true,
+            reputation: true,
           },
         },
         lender: {
           select: {
+            id: true,
             username: true,
             walletAddress: true,
+            reputation: true,
           },
         },
       },
@@ -69,10 +101,6 @@ export async function GET(request: NextRequest) {
     const lentLoans = await prisma.loan.findMany({
       where: {
         lenderId: user.id,
-        NOT: {
-          lenderId: user.id,
-          borrowerId: user.id,
-        },
       },
       orderBy: {
         createdAt: "desc",
@@ -80,28 +108,35 @@ export async function GET(request: NextRequest) {
       include: {
         borrower: {
           select: {
+            id: true,
             username: true,
             walletAddress: true,
+            reputation: true,
           },
         },
         lender: {
           select: {
+            id: true,
             username: true,
             walletAddress: true,
+            reputation: true,
           },
         },
       },
     });
 
+    console.log(`[API /loans] Returning ${allLoans.length} loans in response`);
+
     return Response.json({
       success: true,
+      allLoans: allLoans,
       borrowedLoans: borrowedLoans,
       lentLoans: lentLoans,
       totalBorrowed: borrowedLoans.length,
       totalLent: lentLoans.length,
     });
   } catch (error) {
-    console.error("Error fetching loans:", error);
+    console.error("[API /loans] Error fetching loans:", error);
     return Response.json(
       {
         success: false,

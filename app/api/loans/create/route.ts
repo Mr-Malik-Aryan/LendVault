@@ -63,25 +63,25 @@ export async function POST(request: NextRequest) {
 
     const borrowerId = user.id;
 
-    // Validate loan amount vs collateral value (max 80% LTV)
-    const loanAmountFloat = parseFloat(amount);
-    const collateralValueFloat = parseFloat(collateralValue);
-    const maxLoanAmount = collateralValueFloat * 0.8;
+    // Validate loan amount vs collateral value (max 80% LTV) - amounts are in Wei
+    const loanAmountWei = BigInt(amount);
+    const collateralValueWei = BigInt(collateralValue);
+    const maxLoanAmountWei = (collateralValueWei * BigInt(80)) / BigInt(100);
 
-    if (loanAmountFloat > maxLoanAmount) {
+    if (loanAmountWei > maxLoanAmountWei) {
       return Response.json(
         {
           success: false,
-          error: `Loan amount cannot exceed 80% of collateral value. Maximum loan amount: ${maxLoanAmount.toFixed(4)} ETH`,
-          maxLoanAmount: maxLoanAmount.toFixed(4),
-          collateralValue: collateralValueFloat.toFixed(4),
+          error: `Loan amount cannot exceed 80% of collateral value. Maximum loan amount: ${maxLoanAmountWei.toString()} Wei`,
+          maxLoanAmount: maxLoanAmountWei.toString(),
+          collateralValue: collateralValueWei.toString(),
         },
         { status: 400 }
       );
     }
 
     // Validate minimum loan amount
-    if (loanAmountFloat <= 0) {
+    if (loanAmountWei <= BigInt(0)) {
       return Response.json(
         {
           success: false,
@@ -114,8 +114,8 @@ export async function POST(request: NextRequest) {
     const actualTxHash = txHash || `0x${Math.random().toString(16).substr(2, 64)}`;
     const actualContractAddress = contractAddress || `0x${Math.random().toString(16).substr(2, 40)}`;
 
-    // Calculate LTV ratio
-    const ltvRatio = loanAmountFloat / collateralValueFloat;
+    // Calculate LTV ratio (convert to float for storage)
+    const ltvRatio = Number(loanAmountWei) / Number(collateralValueWei);
 
     // Create the loan
     const loan = await prisma.loan.create({

@@ -139,71 +139,71 @@ export default function MintNFTPage() {
                 </h2>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                   {nfts.map((nft, index) => {
-                    // Extract value from attributes (Rarity or any value trait)
-                    const valueAttribute = nft.metadata.attributes?.find((attr: any) => 
-                      attr.trait_type?.toLowerCase().includes('value') || 
-                      attr.trait_type?.toLowerCase().includes('rarity')
-                    );
-                    const ethValue = valueAttribute?.value || '0';
+                    // Extract value from attributes array - value is in Wei
+                    const valueAttribute = nft.metadata.attributes?.[0]?.value || 0;
+                    const weiValue = valueAttribute?.value || '0';
+                    
+                    // Helper to format Wei with commas for readability
+                    const formatWei = (value: string) => {
+                      return value.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+                    };
                     
                     return (
                       <div
                         key={`${nft.contractAddress}-${nft.tokenId}-${index}`}
-                        className="bg-card border border-border rounded-lg overflow-hidden hover:border-primary transition-all hover:shadow-lg cursor-pointer group"
+                        className="bg-card border-2 border-border rounded-xl overflow-hidden hover:border-primary hover:shadow-2xl hover:shadow-primary/20 transition-all duration-300 cursor-pointer group"
                       >
                         {/* Image */}
                         {nft.image ? (
-                          <div className="w-full h-64 bg-secondary flex items-center justify-center overflow-hidden relative">
+                          <div className="w-full h-72 bg-linear-to-br from-secondary to-secondary/50 flex items-center justify-center overflow-hidden relative">
                             <img
                               src={nft.image}
                               alt={nft.metadata.name}
-                              className="w-full h-full object-cover scale-110 group-hover:scale-100 transition-transform duration-500 ease-in-out"
+                              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 ease-out"
                             />
+                            {/* Overlay gradient on hover */}
+                            <div className="absolute inset-0 bg-linear-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
                           </div>
                         ) : (
-                          <div className="w-full h-64 bg-secondary flex items-center justify-center">
-                            <span className="text-muted-foreground">No Image</span>
+                          <div className="w-full h-72 bg-linear-to-br from-secondary to-muted flex items-center justify-center">
+                            <span className="text-muted-foreground text-lg">No Image</span>
                           </div>
                         )}
 
                         {/* Info - Dark Background */}
-                        <div className="bg-black p-4 space-y-2">
+                        <div className="bg-linear-to-br from-black via-gray-900 to-black p-5 space-y-3">
                           {/* NFT Name */}
-                          <h3 className="text-base font-semibold text-white truncate">
+                          <h3 className="text-lg font-bold text-white truncate group-hover:text-primary transition-colors">
                             {nft.metadata.name || `${nft.contractSymbol} #${nft.tokenId}`}
                           </h3>
                           
-                          {/* ETH Value and Last Sale */}
-                          <div className="space-y-1">
+                          {/* Wei Value Display */}
+                          <div className="bg-gray-800/50 rounded-lg p-3 border border-gray-700">
+                            <div className="text-xs text-gray-400 mb-1">Collateral Value</div>
                             <div className="flex items-baseline gap-2">
-                              <span className="text-2xl font-bold text-white">
-                                {ethValue}
+                              <span className="text-xl font-bold text-primary font-mono">
+                                {formatWei(weiValue)}
                               </span>
-                              <span className="text-sm text-gray-400">ETH</span>
-                            </div>
-                            <div className="flex items-center gap-1 text-xs text-gray-400">
-                              <span>Last sale</span>
-                              <span className="font-semibold text-white">{ethValue}</span>
-                              <span>ETH</span>
+                              <span className="text-xs text-gray-400 font-mono">Wei</span>
                             </div>
                           </div>
 
-                          {/* Additional Info - Collapsible on hover */}
-                          <div className="pt-2 border-t border-gray-800 space-y-1 text-xs">
-                            <div className="flex justify-between">
+                          {/* Additional Info */}
+                          <div className="pt-3 border-t border-gray-800 space-y-2 text-xs">
+                            <div className="flex justify-between items-center">
                               <span className="text-gray-400">Token ID:</span>
-                              <span className="text-white font-mono">{nft.tokenId}</span>
+                              <span className="text-white font-mono bg-gray-800 px-2 py-1 rounded">{nft.tokenId}</span>
                             </div>
-                            <div className="flex justify-between">
+                            <div className="flex justify-between items-center">
                               <span className="text-gray-400">Contract:</span>
-                              <span className="text-white font-mono">
+                              <span className="text-white font-mono bg-gray-800 px-2 py-1 rounded">
                                 {nft.contractAddress.slice(0, 6)}...{nft.contractAddress.slice(-4)}
                               </span>
                             </div>
                           </div>
 
                           {/* Use as Collateral Button */}
-                          <Button className="w-full mt-3 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold">
+                          <Button className="w-full mt-4 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold py-2.5 shadow-lg hover:shadow-primary/50 transition-all duration-300">
                             Use as Collateral
                           </Button>
                         </div>
