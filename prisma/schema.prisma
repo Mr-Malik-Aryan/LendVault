@@ -60,6 +60,7 @@ model Loan {
 
 enum LoanStatus {
   ACTIVE
+  FUNDED
   REPAID
   DEFAULTED
   LIQUIDATED

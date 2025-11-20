@@ -98,7 +98,7 @@ export async function POST(request: NextRequest) {
       where: { id: loanId },
       data: {
         lenderId: lender.id,
-        status: "ACTIVE", // Loan is now actively funded
+        status: "FUNDED", // Loan is now funded by a lender
         startDate: new Date(), // Update start date to when it was funded
       },
       include: {
