@@ -6,17 +6,12 @@ import { X, Loader, CheckCircle, AlertCircle, ExternalLink } from "lucide-react"
 import { toast } from "sonner";
 import { ethers } from "ethers";
 
-<<<<<<< HEAD
 // Get contract address from environment variable
 const LENDVAULT_CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_LENDVAULT_CONTRACT_ADDRESS;
 
 if (!LENDVAULT_CONTRACT_ADDRESS) {
   throw new Error("NEXT_PUBLIC_LENDVAULT_CONTRACT_ADDRESS is not set in environment variables");
 }
-=======
-// YOUR DEPLOYED CONTRACT ADDRESS - MUST MATCH LOANS PAGE!
-const LENDVAULT_CONTRACT_ADDRESS = "0xd8b934580fcE35a11B58C6D73aDeE468a2833fa8";
->>>>>>> 4029f26 (Update loan repayment and investment components)
 
 // Smart Contract ABI for lender functions
 const LENDVAULT_ABI = [
