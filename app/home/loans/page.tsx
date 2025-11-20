@@ -4,10 +4,29 @@ import { useAuth } from "@/hooks/useAuth";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Sidebar } from "@/components/Sidebar";
-import { AlertCircle, Plus, X, Loader } from "lucide-react";
+import { AlertCircle, Plus, X, Loader, CheckCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useNFTs } from "@/hooks/useNFTs";
 import { toast } from "sonner";
+import { ethers } from "ethers";
+
+// Smart Contract ABI (only the functions we need)
+const LENDVAULT_ABI = [
+  "function createLoanOffer(address _nftContract, uint256 _tokenId, uint256 _requestedAmount, uint256 _interestRate, uint256 _duration, uint256 _collateralValue) external returns (uint256)",
+  "function getLoanOffer(uint256 _offerId) external view returns (tuple(uint256 offerId, address borrower, address nftContract, uint256 tokenId, uint256 requestedAmount, uint256 interestRate, uint256 duration, uint256 collateralValue, bool isActive, bool isFilled, uint256 createdAt))",
+  "function getActiveOffers() external view returns (uint256[])",
+  "function getUserOffers(address _user) external view returns (uint256[])",
+  "event OfferCreated(uint256 indexed offerId, address indexed borrower, address nftContract, uint256 tokenId, uint256 requestedAmount, uint256 interestRate, uint256 duration)"
+];
+
+// ERC721 ABI for NFT approval
+const ERC721_ABI = [
+  "function approve(address to, uint256 tokenId) external",
+  "function getApproved(uint256 tokenId) external view returns (address)",
+  "function setApprovalForAll(address operator, bool approved) external",
+  "function isApprovedForAll(address owner, address operator) external view returns (bool)",
+  "function ownerOf(uint256 tokenId) external view returns (address)"
+];
 
 interface Loan {
   id: string;
@@ -16,6 +35,17 @@ interface Loan {
   duration: number;
   status: string;
   createdAt: string;
+}
+
+// Transaction status states
+enum TxStatus {
+  IDLE = "idle",
+  APPROVING = "approving",
+  APPROVED = "approved",
+  CREATING = "creating",
+  CONFIRMING = "confirming",
+  SUCCESS = "success",
+  ERROR = "error"
 }
 
 export default function LoansPage() {
@@ -34,8 +64,16 @@ export default function LoansPage() {
   const [duration, setDuration] = useState("30");
   const [selectedNFT, setSelectedNFT] = useState<any>(null);
   const [submitting, setSubmitting] = useState(false);
+  
+  // Transaction state
+  const [txStatus, setTxStatus] = useState<TxStatus>(TxStatus.IDLE);
+  const [txHash, setTxHash] = useState<string>("");
+  const [offerId, setOfferId] = useState<string>("");
 
-  // Interest rate options with approval time estimates
+  // YOUR DEPLOYED CONTRACT ADDRESS - UPDATE THIS!
+  const LENDVAULT_CONTRACT_ADDRESS = "0x899054c1aB95d1b9bf15de16C51E3711564bDe67"; // TODO: Replace with your deployed contract
+
+  // Interest rate options
   const interestRateOptions = [
     { rate: "5", label: "5% APR", approvalTime: "Slower approval (~2-3 days)" },
     { rate: "10", label: "10% APR", approvalTime: "Moderate approval (~1-2 days)" },
@@ -69,7 +107,6 @@ export default function LoansPage() {
     }
   }, [isAuthenticated, user?.walletAddress]);
 
-  // Fetch NFTs when form is opened
   useEffect(() => {
     if (showLoanForm && user?.walletAddress && nfts.length === 0) {
       fetchNFTs(user.walletAddress, "", network);
@@ -78,6 +115,9 @@ export default function LoansPage() {
 
   const handleOpenLoanForm = () => {
     setShowLoanForm(true);
+    setTxStatus(TxStatus.IDLE);
+    setTxHash("");
+    setOfferId("");
   };
 
   const handleCloseLoanForm = () => {
@@ -86,6 +126,9 @@ export default function LoansPage() {
     setInterestRate("5");
     setDuration("30");
     setSelectedNFT(null);
+    setTxStatus(TxStatus.IDLE);
+    setTxHash("");
+    setOfferId("");
   };
 
   const handleSubmitLoan = async (e: React.FormEvent) => {
@@ -104,18 +147,11 @@ export default function LoansPage() {
       toast.error("Please select an NFT as collateral");
       return;
     }
-
-    // Validate selectedNFT has required fields
-    console.log("Selected NFT full object:", JSON.stringify(selectedNFT, null, 2));
-    
-    if (!selectedNFT.tokenId || selectedNFT.tokenId === 'undefined' || !selectedNFT.contractAddress) {
-      toast.error("Selected NFT is missing required information (tokenId or contractAddress)");
-      console.error("Invalid NFT selected:", selectedNFT);
-      console.error("TokenId:", selectedNFT.tokenId);
-      console.error("ContractAddress:", selectedNFT.contractAddress);
+    if (!selectedNFT.tokenId || !selectedNFT.contractAddress) {
+      toast.error("Selected NFT is missing required information");
       return;
     }
-    console.log("Selected NFT for collateral:", selectedNFT);
+
     // Get collateral value
     const collateralValue = parseFloat(
       selectedNFT.metadata.attributes?.find((attr: any) => 
@@ -143,31 +179,171 @@ export default function LoansPage() {
     setSubmitting(true);
     
     try {
-      // Calculate due date
-      const durationInSeconds = parseInt(duration) * 24 * 60 * 60;
-      const dueDate = new Date(Date.now() + durationInSeconds * 1000);
+      // Check if MetaMask is installed
+      if (!window.ethereum) {
+        throw new Error("Please install MetaMask to create a loan");
+      }
+
+      // Get provider and signer
+      const provider = new ethers.BrowserProvider(window.ethereum);
+      const signer = await provider.getSigner();
       
-      // Ensure tokenId is a string
-      const collateralId = String(selectedNFT.tokenId);
+      // Verify user is on correct network (Sepolia)
+      const network = await provider.getNetwork();
+      const chainId = Number(network.chainId);
+      console.log("Current chain ID:", chainId);
+      
+      if (chainId !== 11155111) { // Sepolia chain ID
+        toast.error(`Wrong network detected. Please switch to Sepolia testnet in MetaMask.`);
+        
+        // Attempt to switch to Sepolia
+        try {
+          await window.ethereum.request({
+            method: 'wallet_switchEthereumChain',
+            params: [{ chainId: '0xaa36a7' }], // Sepolia chain ID in hex
+          });
+          toast.success("Switched to Sepolia! Please try again.");
+        } catch (switchError: any) {
+          // This error code indicates that the chain has not been added to MetaMask
+          if (switchError.code === 4902) {
+            try {
+              await window.ethereum.request({
+                method: 'wallet_addEthereumChain',
+                params: [
+                  {
+                    chainId: '0xaa36a7',
+                    chainName: 'Sepolia Testnet',
+                    nativeCurrency: {
+                      name: 'Sepolia ETH',
+                      symbol: 'ETH',
+                      decimals: 18
+                    },
+                    rpcUrls: ['https://sepolia.infura.io/v3/'],
+                    blockExplorerUrls: ['https://sepolia.etherscan.io']
+                  },
+                ],
+              });
+              toast.success("Sepolia network added! Please try again.");
+            } catch (addError) {
+              toast.error("Failed to add Sepolia network. Please add it manually in MetaMask.");
+            }
+          } else {
+            toast.error("Failed to switch network. Please switch to Sepolia manually in MetaMask.");
+          }
+        }
+        setSubmitting(false);
+        return;
+      }
+
+      // Step 1: Approve NFT transfer
+      setTxStatus(TxStatus.APPROVING);
+      toast.info("Step 1/2: Approving NFT transfer...");
+      
+      const nftContract = new ethers.Contract(
+        selectedNFT.contractAddress,
+        ERC721_ABI,
+        signer
+      );
+
+      // Check if already approved
+      const approvedAddress = await nftContract.getApproved(selectedNFT.tokenId);
+      
+      if (approvedAddress.toLowerCase() !== LENDVAULT_CONTRACT_ADDRESS.toLowerCase()) {
+        const approveTx = await nftContract.approve(
+          LENDVAULT_CONTRACT_ADDRESS,
+          selectedNFT.tokenId
+        );
+        
+        toast.info("Waiting for approval confirmation...");
+        await approveTx.wait();
+        toast.success("NFT approved! ");
+      } else {
+        toast.success("NFT already approved! ");
+      }
+
+      setTxStatus(TxStatus.APPROVED);
+
+      // Step 2: Create loan offer on smart contract
+      setTxStatus(TxStatus.CREATING);
+      toast.info("Step 2/2: Creating loan offer on blockchain...");
+
+      const lendVaultContract = new ethers.Contract(
+        LENDVAULT_CONTRACT_ADDRESS,
+        LENDVAULT_ABI,
+        signer
+      );
+
+      // Convert values to wei and proper formats
+      const requestedAmountWei = ethers.parseEther(loanAmount);
+      const collateralValueWei = ethers.parseEther(collateralValue.toString());
+      const interestRateBps = parseInt(interestRate) * 100; // Convert to basis points (5% = 500)
+      const durationSeconds = parseInt(duration) * 24 * 60 * 60;
+
+      console.log("Creating loan offer with params:", {
+        nftContract: selectedNFT.contractAddress,
+        tokenId: selectedNFT.tokenId,
+        requestedAmount: loanAmount + " ETH",
+        interestRate: interestRateBps + " bps",
+        duration: durationSeconds + " seconds",
+        collateralValue: collateralValue + " ETH"
+      });
+
+      // Create loan offer transaction
+      const createTx = await lendVaultContract.createLoanOffer(
+        selectedNFT.contractAddress,
+        selectedNFT.tokenId,
+        requestedAmountWei,
+        interestRateBps,
+        durationSeconds,
+        collateralValueWei
+      );
+
+      setTxHash(createTx.hash);
+      setTxStatus(TxStatus.CONFIRMING);
+      toast.info("Transaction submitted! Waiting for confirmation...");
+
+      // Wait for transaction confirmation
+      const receipt = await createTx.wait();
+      
+      // Extract offerId from event logs
+      const offerCreatedEvent = receipt.logs
+        .map((log: any) => {
+          try {
+            return lendVaultContract.interface.parseLog(log);
+          } catch {
+            return null;
+          }
+        })
+        .find((event: any) => event && event.name === "OfferCreated");
+
+      const createdOfferId = offerCreatedEvent?.args?.offerId?.toString() || "0";
+      setOfferId(createdOfferId);
+
+      console.log("Loan offer created! Offer ID:", createdOfferId);
+      console.log("Transaction hash:", receipt.hash);
+
+      setTxStatus(TxStatus.SUCCESS);
+      toast.success("Loan offer created successfully");
+
+      // Step 3: Save to database
+      const dueDate = new Date(Date.now() + durationSeconds * 1000);
       
       const loanData = {
         walletAddress: user?.walletAddress,
         amount: loanAmount,
         interestRate: interestRate,
-        duration: durationInSeconds.toString(),
+        duration: durationSeconds.toString(),
         collateralType: "NFT",
-        collateralId: collateralId,
+        collateralId: selectedNFT.tokenId.toString(),
         collateralValue: collateralValue.toString(),
         dueDate: dueDate.toISOString(),
         collateralContractAddress: selectedNFT.contractAddress,
-        network: network,
+        network: "sepolia",
+        txHash: receipt.hash,
+        offerId: createdOfferId,
+        contractAddress: LENDVAULT_CONTRACT_ADDRESS
       };
 
-      console.log("Creating loan with data:", JSON.stringify(loanData, null, 2));
-      console.log("User data:", user);
-      console.log("Selected NFT:", selectedNFT);
-      console.log("Collateral value:", collateralValue);
-      
       const response = await fetch('/api/loans/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -176,26 +352,59 @@ export default function LoansPage() {
 
       const data = await response.json();
       
-      console.log("Loan creation response:", JSON.stringify(data, null, 2));
-      
       if (!response.ok) {
-        console.error("Loan creation failed:", data);
-        throw new Error(data.error || data.details || 'Failed to create loan');
+        console.warn("Database save failed:", data);
+        toast.warning("Loan created on blockchain but failed to save to database");
+      } else {
+        toast.success("Loan saved to database!");
       }
       
-      toast.success("Loan request created successfully!");
-      handleCloseLoanForm();
+      // Wait 2 seconds to show success state, then close
+      setTimeout(() => {
+        handleCloseLoanForm();
+        
+        // Refresh loans list
+        fetch(`/api/loans?walletAddress=${user?.walletAddress}`)
+          .then(res => res.json())
+          .then(data => setLoans(data.borrowedLoans || []))
+          .catch(err => console.error("Failed to refresh loans:", err));
+      }, 2000);
+
+    } catch (err: any) {
+      console.error("Error creating loan:", err);
+      setTxStatus(TxStatus.ERROR);
       
-      // Refresh loans list
-      const loansResponse = await fetch(`/api/loans?walletAddress=${user?.walletAddress}`);
-      if (loansResponse.ok) {
-        const loansData = await loansResponse.json();
-        setLoans(loansData.borrowedLoans || []);
+      if (err.code === 4001) {
+        toast.error("Transaction rejected by user");
+      } else if (err.code === "INSUFFICIENT_FUNDS") {
+        toast.error("Insufficient funds for gas fees");
+      } else if (err.message?.includes("user rejected")) {
+        toast.error("Transaction rejected by user");
+      } else {
+        toast.error(err.message || "Failed to create loan offer");
       }
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to create loan request");
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  // Get status message based on transaction status
+  const getStatusMessage = () => {
+    switch (txStatus) {
+      case TxStatus.APPROVING:
+        return "Approving NFT transfer...";
+      case TxStatus.APPROVED:
+        return "NFT approved! Creating loan offer...";
+      case TxStatus.CREATING:
+        return "Creating loan offer on blockchain...";
+      case TxStatus.CONFIRMING:
+        return "Waiting for blockchain confirmation...";
+      case TxStatus.SUCCESS:
+        return "Loan offer created successfully!";
+      case TxStatus.ERROR:
+        return "Transaction failed";
+      default:
+        return "Submit Loan Request";
     }
   };
 
@@ -263,7 +472,7 @@ export default function LoansPage() {
               <div className="text-6xl mb-4">📋</div>
               <h2 className="text-2xl font-semibold text-foreground mb-2">No Loan Requests Yet</h2>
               <p className="text-muted-foreground mb-6">
-                You haven't created any loan requests yet. Head to your NFTs to create one!
+                You haven't created any loan requests yet. Click "Request Loan" to get started!
               </p>
             </div>
           ) : (
@@ -314,11 +523,14 @@ export default function LoansPage() {
                       variant="outline" 
                       className="w-full"
                       onClick={() => {
-                        // TODO: Implement view details
-                        toast.info("View loan details coming soon!");
+                        if (loan.txHash) {
+                          window.open(`https://sepolia.etherscan.io/tx/${loan.txHash}`, '_blank');
+                        } else {
+                          toast.info("View loan details coming soon!");
+                        }
                       }}
                     >
-                      View Details
+                      View on Etherscan
                     </Button>
                   </div>
                 </div>
@@ -336,10 +548,40 @@ export default function LoansPage() {
                   <button
                     onClick={handleCloseLoanForm}
                     className="text-muted-foreground hover:text-foreground transition-colors"
+                    disabled={submitting}
                   >
                     <X className="w-6 h-6" />
                   </button>
                 </div>
+
+                {/* Transaction Status Banner */}
+                {txStatus !== TxStatus.IDLE && txStatus !== TxStatus.ERROR && (
+                  <div className="bg-primary/10 border-b border-primary/20 p-4">
+                    <div className="flex items-center gap-3">
+                      {txStatus === TxStatus.SUCCESS ? (
+                        <CheckCircle className="w-5 h-5 text-green-500 shrink-0" />
+                      ) : (
+                        <Loader className="w-5 h-5 animate-spin text-primary shrink-0" />
+                      )}
+                      <div className="flex-1">
+                        <p className="font-semibold text-foreground">{getStatusMessage()}</p>
+                        {txHash && (
+                          <a
+                            href={`https://sepolia.etherscan.io/tx/${txHash}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-xs text-primary hover:underline"
+                          >
+                            View on Etherscan →
+                          </a>
+                        )}
+                        {offerId && (
+                          <p className="text-xs text-muted-foreground">Offer ID: {offerId}</p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 {/* Form */}
                 <form onSubmit={handleSubmitLoan} className="p-6 space-y-6">
@@ -367,6 +609,7 @@ export default function LoansPage() {
                       className="w-full px-4 py-2 bg-background border border-input rounded-lg text-foreground focus:ring-2 focus:ring-ring outline-none"
                       placeholder="Enter amount in ETH"
                       required
+                      disabled={submitting}
                     />
                     {selectedNFT && (
                       <p className="text-xs text-muted-foreground mt-2">
@@ -393,7 +636,7 @@ export default function LoansPage() {
                             interestRate === option.rate
                               ? "border-primary bg-primary/5"
                               : "border-border hover:border-primary/50"
-                          }`}
+                          } ${submitting ? "opacity-50 cursor-not-allowed" : ""}`}
                         >
                           <div className="flex items-center gap-3">
                             <input
@@ -403,6 +646,7 @@ export default function LoansPage() {
                               checked={interestRate === option.rate}
                               onChange={(e) => setInterestRate(e.target.value)}
                               className="w-4 h-4 text-primary"
+                              disabled={submitting}
                             />
                             <div>
                               <p className="font-semibold text-foreground">{option.label}</p>
@@ -413,7 +657,7 @@ export default function LoansPage() {
                       ))}
                     </div>
                     <p className="text-xs text-muted-foreground mt-2">
-                      💡 Higher interest rates typically get funded faster as they're more attractive to lenders
+                      💡 Higher interest rates typically get funded faster
                     </p>
                   </div>
 
@@ -427,29 +671,13 @@ export default function LoansPage() {
                       onChange={(e) => setDuration(e.target.value)}
                       className="w-full px-4 py-2 bg-background border border-input rounded-lg text-foreground focus:ring-2 focus:ring-ring outline-none"
                       required
+                      disabled={submitting}
                     >
                       <option value="7">7 Days</option>
                       <option value="14">14 Days</option>
                       <option value="30">30 Days</option>
                       <option value="60">60 Days</option>
                       <option value="90">90 Days</option>
-                    </select>
-                  </div>
-
-                  {/* Network Selection */}
-                  <div>
-                    <label className="block text-sm font-medium text-foreground mb-2">
-                      Network <span className="text-destructive">*</span>
-                    </label>
-                    <select
-                      value={network}
-                      onChange={(e) => setNetwork(e.target.value)}
-                      className="w-full px-4 py-2 bg-background border border-input rounded-lg text-foreground focus:ring-2 focus:ring-ring outline-none"
-                    >
-                      <option value="sepolia">Sepolia Testnet</option>
-                      <option value="goerli">Goerli Testnet</option>
-                      <option value="mumbai">Mumbai (Polygon Testnet)</option>
-                      <option value="hardhat">Hardhat (Local)</option>
                     </select>
                   </div>
 
@@ -466,11 +694,12 @@ export default function LoansPage() {
                       </div>
                     ) : nfts.length === 0 ? (
                       <div className="bg-secondary/50 border border-border rounded-lg p-6 text-center">
-                        <p className="text-muted-foreground mb-3">No NFTs found on this network</p>
+                        <p className="text-muted-foreground mb-3">No NFTs found on Sepolia</p>
                         <Button
                           type="button"
-                          onClick={() => fetchNFTs(user?.walletAddress || "", "", network)}
+                          onClick={() => fetchNFTs(user?.walletAddress || "", "", "sepolia")}
                           variant="outline"
+                          disabled={submitting}
                         >
                           Refresh NFTs
                         </Button>
@@ -488,12 +717,12 @@ export default function LoansPage() {
                           return (
                             <div
                               key={`${nft.contractAddress}-${nft.tokenId}-${index}`}
-                              onClick={() => setSelectedNFT(nft)}
+                              onClick={() => !submitting && setSelectedNFT(nft)}
                               className={`cursor-pointer border-2 rounded-lg overflow-hidden transition-all ${
                                 isSelected
                                   ? "border-primary shadow-lg shadow-primary/20"
                                   : "border-border hover:border-primary/50"
-                              }`}
+                              } ${submitting ? "opacity-50 cursor-not-allowed" : ""}`}
                             >
                               {nft.image ? (
                                 <div className="w-full h-32 bg-secondary overflow-hidden">
@@ -566,7 +795,7 @@ export default function LoansPage() {
                       {submitting ? (
                         <span className="flex items-center gap-2">
                           <Loader className="w-4 h-4 animate-spin" />
-                          Creating...
+                          {getStatusMessage()}
                         </span>
                       ) : (
                         "Submit Loan Request"

@@ -17,6 +17,9 @@ export async function POST(request: NextRequest) {
       collateralContractAddress,
       network,
       dueDate,
+      txHash, // Actual transaction hash from blockchain
+      offerId, // Offer ID from smart contract
+      contractAddress, // Smart contract address
     } = body;
 
     // Validate required fields
@@ -107,10 +110,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // TODO: In production, generate actual contract address and tx hash
-    // For now, using placeholder values
-    const mockTxHash = `0x${Math.random().toString(16).substr(2, 64)}`;
-    const mockContractAddress = `0x${Math.random().toString(16).substr(2, 40)}`;
+    // Use actual transaction hash from blockchain or generate placeholder
+    const actualTxHash = txHash || `0x${Math.random().toString(16).substr(2, 64)}`;
+    const actualContractAddress = contractAddress || `0x${Math.random().toString(16).substr(2, 40)}`;
 
     // Calculate LTV ratio
     const ltvRatio = loanAmountFloat / collateralValueFloat;
@@ -119,7 +121,7 @@ export async function POST(request: NextRequest) {
     const loan = await prisma.loan.create({
       data: {
         borrowerId,
-        lenderId: borrowerId, // Temporary - will be updated when a lender accepts
+        lenderId: borrowerId, // Will be updated when a lender accepts
         amount: amount,
         interestRate: interestRate,
         duration: parseInt(duration),
@@ -127,10 +129,10 @@ export async function POST(request: NextRequest) {
         collateralId: collateralId,
         collateralValue: collateralValue,
         ltvRatio: ltvRatio,
-        status: "ACTIVE",
+        status: "ACTIVE", // Loan offer is active, waiting for lender
         dueDate: new Date(dueDate),
-        txHash: mockTxHash,
-        contractAddress: mockContractAddress,
+        txHash: actualTxHash,
+        contractAddress: actualContractAddress,
       },
     });
 
@@ -154,10 +156,19 @@ export async function POST(request: NextRequest) {
         loanId: loan.id,
         type: "LOAN_CREATED",
         amount: amount,
-        txHash: mockTxHash,
-        blockNumber: Math.floor(Math.random() * 1000000), // Mock block number
+        txHash: actualTxHash,
+        blockNumber: Math.floor(Math.random() * 1000000), // Will be updated by blockchain listener
         timestamp: new Date(),
       },
+    });
+
+    console.log("Loan created successfully:", {
+      loanId: loan.id,
+      offerId: offerId,
+      txHash: actualTxHash,
+      borrower: walletAddress,
+      amount: amount,
+      collateralId: collateralId,
     });
 
     return Response.json({
@@ -173,16 +184,17 @@ export async function POST(request: NextRequest) {
         dueDate: loan.dueDate,
         txHash: loan.txHash,
         contractAddress: loan.contractAddress,
+        offerId: offerId, // Return offerId for reference
       },
       collateral: {
         id: collateral.id,
         type: collateral.type,
         isLocked: collateral.isLocked,
       },
-      message: "Loan request created successfully",
+      message: "Loan offer created successfully on blockchain and saved to database",
     });
   } catch (error) {
-    console.error("Error creating loan:", error);
+    console.error("❌ Error creating loan:", error);
     return Response.json(
       {
         success: false,
