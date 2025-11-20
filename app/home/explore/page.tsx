@@ -43,6 +43,12 @@ interface Loan {
     walletAddress: string;
     reputation: number;
   };
+  lender?: {
+    id: string;
+    username: string;
+    walletAddress: string;
+    reputation: number;
+  };
   amountInEth: number;
   interestRatePercent: number;
   durationInDays: number;
@@ -250,6 +256,14 @@ export default function ExplorePage() {
     });
   };
 
+  const formatWalletAddress = (address: string) => {
+    return `${address.slice(0, 6)}...${address.slice(-4)}`;
+  };
+
+  const isCurrentUserLender = (loan: Loan) => {
+    return loan.lender?.walletAddress?.toLowerCase() === user?.walletAddress?.toLowerCase();
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -372,9 +386,9 @@ export default function ExplorePage() {
 
           {/* Loans Grid */}
           {loadingLoans ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-              {[1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
-                <div key={i} className="bg-card border border-border rounded-lg p-4 animate-pulse aspect-square flex flex-col">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {[1, 2, 3, 4, 5, 6].map((i) => (
+                <div key={i} className="bg-card border border-border rounded-lg p-6 animate-pulse flex flex-col">
                   <div className="flex gap-2 mb-3">
                     <div className="w-10 h-10 bg-secondary rounded-full shrink-0"></div>
                     <div className="flex-1 space-y-2">
@@ -416,11 +430,11 @@ export default function ExplorePage() {
               <div className="mb-4 text-sm text-muted-foreground">
                 Showing {filteredLoans.length} loan{filteredLoans.length !== 1 ? 's' : ''}
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 justify-items-center">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {filteredLoans.map((loan) => (
                   <div
                     key={loan.id}
-                    className="group relative w-full max-w-[280px] rounded-2xl bg-gradient-to-br from-card via-card to-secondary p-6 shadow-card transition-all duration-300 hover:shadow-card-hover hover:scale-[1.02]"
+                    className="group relative w-full rounded-2xl bg-gradient-to-br from-card via-card to-secondary p-6 shadow-card transition-all duration-300 hover:shadow-card-hover hover:scale-[1.02]"
                   >
                     {/* Gradient border effect */}
                     <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-primary/20 via-transparent to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100 pointer-events-none" />
@@ -470,22 +484,48 @@ export default function ExplorePage() {
 
                       {/* Status & Collateral */}
                       <div className="pt-3 border-t border-border/50 space-y-3">
-                        {loan.isOwnLoan ? (
+                        {/* Status - Show for all loans */}
+                        <div>
+                          <p className="text-xs text-muted-foreground mb-1.5 uppercase tracking-wide">Status</p>
+                          <Badge 
+                            className={`
+                              font-semibold px-3 py-1
+                              ${loan.status === "ACTIVE" 
+                                ? "bg-primary/15 text-primary border-primary/30 shadow-glow" 
+                                : loan.status === "FUNDED"
+                                ? "bg-green-500/15 text-green-500 border-green-500/30"
+                                : loan.status === "REPAID"
+                                ? "bg-blue-500/15 text-blue-500 border-blue-500/30"
+                                : "bg-secondary text-secondary-foreground border-border"
+                              }
+                            `}
+                          >
+                            {loan.status}
+                          </Badge>
+                        </div>
+
+                        {/* Funded By - Show for funded loans */}
+                        {loan.status === "FUNDED" && loan.lender && (
                           <div>
-                            <p className="text-xs text-muted-foreground mb-1.5 uppercase tracking-wide">Status</p>
-                            <Badge 
-                              className={`
-                                font-semibold px-3 py-1
-                                ${loan.status === "ACTIVE" 
-                                  ? "bg-primary/15 text-primary border-primary/30 shadow-glow" 
-                                  : "bg-secondary text-secondary-foreground border-border"
-                                }
-                              `}
-                            >
-                              {loan.status}
-                            </Badge>
+                            <p className="text-xs text-muted-foreground mb-1.5 uppercase tracking-wide">Funded By</p>
+                            {isCurrentUserLender(loan) ? (
+                              <div className="flex items-center gap-2">
+                                <p className="text-sm font-semibold text-primary">You</p>
+                                <Badge variant="outline" className="text-xs">Lender</Badge>
+                              </div>
+                            ) : (
+                              <div>
+                                <p className="text-sm font-semibold text-foreground">{loan.lender.username}</p>
+                                <p className="text-xs font-mono text-muted-foreground">
+                                  {formatWalletAddress(loan.lender.walletAddress)}
+                                </p>
+                              </div>
+                            )}
                           </div>
-                        ) : (
+                        )}
+
+                        {/* Profit - Only show for non-own loans that are ACTIVE */}
+                        {!loan.isOwnLoan && loan.status === "ACTIVE" && (
                           <div>
                             <p className="text-xs text-muted-foreground mb-1.5 uppercase tracking-wide">Your Profit</p>
                             <p className="text-sm font-semibold text-green-500">
@@ -505,12 +545,30 @@ export default function ExplorePage() {
 
                       {/* Action Button */}
                       {!loan.isOwnLoan && (
-                        <Button
-                          className="w-full h-9 mt-4"
-                          onClick={() => handleInvest(loan)}
-                        >
-                          Invest Now
-                        </Button>
+                        loan.status === "FUNDED" ? (
+                          <Button
+                            className="w-full h-9 mt-4"
+                            disabled
+                            variant="outline"
+                          >
+                            Funded
+                          </Button>
+                        ) : loan.status === "ACTIVE" ? (
+                          <Button
+                            className="w-full h-9 mt-4"
+                            onClick={() => handleInvest(loan)}
+                          >
+                            Invest Now
+                          </Button>
+                        ) : (
+                          <Button
+                            className="w-full h-9 mt-4"
+                            disabled
+                            variant="outline"
+                          >
+                            {loan.status}
+                          </Button>
+                        )
                       )}
                     </div>
                   </div>

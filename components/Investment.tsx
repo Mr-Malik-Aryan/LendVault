@@ -6,8 +6,12 @@ import { X, Loader, CheckCircle, AlertCircle, ExternalLink } from "lucide-react"
 import { toast } from "sonner";
 import { ethers } from "ethers";
 
-// YOUR DEPLOYED CONTRACT ADDRESS - MUST MATCH LOANS PAGE!
-const LENDVAULT_CONTRACT_ADDRESS = "0x899054c1aB95d1b9bf15de16C51E3711564bDe67";
+// Get contract address from environment variable
+const LENDVAULT_CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_LENDVAULT_CONTRACT_ADDRESS;
+
+if (!LENDVAULT_CONTRACT_ADDRESS) {
+  throw new Error("NEXT_PUBLIC_LENDVAULT_CONTRACT_ADDRESS is not set in environment variables");
+}
 
 // Smart Contract ABI for lender functions
 const LENDVAULT_ABI = [
@@ -155,6 +159,10 @@ export function InvestModal({ loan, onClose, onSuccess, currentUserAddress }: In
 
       // Get contract - use contract address from loan data, fallback to constant
       const contractAddress = loan.contractAddress || LENDVAULT_CONTRACT_ADDRESS;
+      
+      if (!contractAddress) {
+        throw new Error("Contract address not available");
+      }
       
       console.log("Using contract address:", contractAddress);
       
@@ -391,12 +399,12 @@ export function InvestModal({ loan, onClose, onSuccess, currentUserAddress }: In
               <div className="flex justify-between items-center">
                 <span className="text-muted-foreground">Smart Contract:</span>
                 <a
-                  href={`https://sepolia.etherscan.io/address/${loan.contractAddress || LENDVAULT_CONTRACT_ADDRESS}`}
+                  href={`https://sepolia.etherscan.io/address/${loan.contractAddress || LENDVAULT_CONTRACT_ADDRESS || ''}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="font-mono text-primary hover:underline flex items-center gap-1"
                 >
-                  {(loan.contractAddress || LENDVAULT_CONTRACT_ADDRESS).slice(0, 6)}...{(loan.contractAddress || LENDVAULT_CONTRACT_ADDRESS).slice(-4)}
+                  {((loan.contractAddress || LENDVAULT_CONTRACT_ADDRESS || '')).slice(0, 6)}...{((loan.contractAddress || LENDVAULT_CONTRACT_ADDRESS || '')).slice(-4)}
                   <ExternalLink className="w-3 h-3" />
                 </a>
               </div>

@@ -70,8 +70,12 @@ export default function LoansPage() {
   const [txHash, setTxHash] = useState<string>("");
   const [offerId, setOfferId] = useState<string>("");
 
-  // YOUR DEPLOYED CONTRACT ADDRESS - UPDATE THIS!
-  const LENDVAULT_CONTRACT_ADDRESS = "0x899054c1aB95d1b9bf15de16C51E3711564bDe67"; // TODO: Replace with your deployed contract
+  // Get contract address from environment variable
+  const LENDVAULT_CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_LENDVAULT_CONTRACT_ADDRESS;
+
+  if (!LENDVAULT_CONTRACT_ADDRESS) {
+    throw new Error("NEXT_PUBLIC_LENDVAULT_CONTRACT_ADDRESS is not set in environment variables");
+  }
 
   // Interest rate options
   const interestRateOptions = [
