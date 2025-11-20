@@ -1,12 +1,12 @@
 
 { 
- "name": "Strawhat",
-  "description": "Strawhat wants to be king of the pirates",
-  "image": "ipfs://bafkreicw2ziyhmut2ljkwlz67nryvaejyd2o5ksrhqodm47u4nsxuglocu",
+ "name": "Wormhole",
+  "description": "Wormhole is a decentralized cross-chain messaging protocol that connects multiple blockchain networks, enabling seamless asset transfers and data communication between them. It serves as a bridge for various blockchains, facilitating interoperability and enhancing the overall blockchain ecosystem.",
+  "image": "ipfs://bafkreic62cvh7uk2c6hfxngzmqumpy6csva5cjvspwk2zen75pgxvoxzxu",
   "attributes": [
     {
       "trait_type": "Logo",
-      "value": "2000"
+      "value": "5000"
     }
    
     

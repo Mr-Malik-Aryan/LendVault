@@ -33,6 +33,11 @@ export function Sidebar({ username }: SidebarProps) {
       href: "/home/nfts",
     },
     {
+      icon: Wand2,
+      label: "Mint NFTs",
+      href: "/home/mint-nfts",
+    },
+    {
       icon: User,
       label: "My Account",
       href: "/home/account",
