@@ -1,0 +1,97 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+model User {
+  id              String   @id @default(cuid())
+  username        String   @unique
+  walletAddress   String   @unique
+  totalBorrowed   String   @default("0")
+  totalLent       String   @default("0")
+  reputation      Int      @default(0)
+  loans           Loan[]   @relation("Borrower")
+  lentLoans       Loan[]   @relation("Lender")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model Loan {
+  id                String      @id @default(cuid())
+  borrowerId        String
+  borrower          User        @relation("Borrower", fields: [borrowerId], references: [id])
+  lenderId          String
+  lender            User        @relation("Lender", fields: [lenderId], references: [id])
+  
+  amount            String      // Loan amount in wei
+  interestRate      String      // Annual interest rate (basis points)
+  duration          Int         // Loan duration in seconds
+  
+  collateralType    String      // NFT, ERC20, etc.
+  collateralId      String      // Token ID or contract address
+  collateralValue   String      // Estimated value in wei
+  
+  status            LoanStatus  @default(ACTIVE)
+  startDate         DateTime    @default(now())
+  dueDate           DateTime
+  repaidAt          DateTime?
+  liquidatedAt      DateTime?
+  
+  txHash            String      // Transaction hash
+  contractAddress   String      // Deployed contract address
+  
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+}
+
+enum LoanStatus {
+  ACTIVE
+  REPAID
+  DEFAULTED
+  LIQUIDATED
+  GRACE_PERIOD
+}
+
+model Collateral {
+  id                String   @id @default(cuid())
+  type              String   // NFT, ERC20, LST
+  contractAddress   String
+  tokenId           String?  // For NFTs
+  amount            String?  // For tokens
+  owner             String
+  isLocked          Boolean  @default(false)
+  lockedInLoan      String?  // Loan ID if locked
+  estimatedValue    String
+  lastValuation     DateTime @default(now())
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+model LiquidityPool {
+  id                String   @id @default(cuid())
+  lenderAddress     String
+  depositedAmount   String
+  availableAmount   String
+  earnedInterest    String   @default("0")
+  depositDate       DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+model Transaction {
+  id                String   @id @default(cuid())
+  loanId            String
+  type              String   // LOAN_CREATED, REPAYMENT, LIQUIDATION
+  amount            String
+  txHash            String
+  blockNumber       Int
+  timestamp         DateTime @default(now())
+}
