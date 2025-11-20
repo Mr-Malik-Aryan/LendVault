@@ -1,14 +1,8 @@
 
 { 
-<<<<<<< HEAD
  "name": "Wormhole",
   "description": "Wormhole is a decentralized cross-chain messaging protocol that connects multiple blockchain networks, enabling seamless asset transfers and data communication between them. It serves as a bridge for various blockchains, facilitating interoperability and enhancing the overall blockchain ecosystem.",
   "image": "ipfs://bafkreic62cvh7uk2c6hfxngzmqumpy6csva5cjvspwk2zen75pgxvoxzxu",
-=======
- "name": "meow",
-  "description": "pink pussy oh yeah",
-  "image": "ipfs://bafkreidkgfwwunmbcf3apufbs7zz5aufbrihxvtb4rfxazwa7asqtqxwm4",
->>>>>>> 4e32a5e (Add loan repayment functionality with blockchain loan ID auto-fetch)
   "attributes": [
     {
       "trait_type": "Logo",
