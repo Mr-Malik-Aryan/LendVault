@@ -88,8 +88,13 @@ export function InvestModal({ loan, onClose, onSuccess, currentUserAddress }: In
       return;
     }
 
+    // Check if user is trying to fund their own loan (database check)
     if (loan.borrower.walletAddress.toLowerCase() === currentUserAddress.toLowerCase()) {
       toast.error("You cannot fund your own loan offer");
+      console.error("User trying to fund own loan:", {
+        borrower: loan.borrower.walletAddress,
+        currentUser: currentUserAddress
+      });
       return;
     }
 
@@ -191,6 +196,17 @@ export function InvestModal({ loan, onClose, onSuccess, currentUserAddress }: In
           isFilled: offerDetails.isFilled,
           requestedAmount: offerDetails.requestedAmount.toString()
         });
+        
+        // Double-check borrower address from blockchain
+        if (offerDetails.borrower.toLowerCase() === currentUserAddress.toLowerCase()) {
+          toast.error("You cannot fund your own loan offer (verified on blockchain)");
+          console.error("Borrower address from blockchain matches current user:", {
+            borrower: offerDetails.borrower,
+            currentUser: currentUserAddress
+          });
+          setSubmitting(false);
+          return;
+        }
         
         if (!offerDetails.isActive) {
           toast.error("This loan offer is no longer active on the blockchain");
