@@ -240,6 +240,29 @@ export function InvestModal({ loan, onClose, onSuccess, currentUserAddress }: In
       console.log("Transaction hash:", receipt.hash);
       console.log("Block number:", receipt.blockNumber);
 
+      // Extract loanId from LoanFunded event
+      let blockchainLoanId = null;
+      try {
+        const loanFundedEvent = receipt.logs
+          .map((log: any) => {
+            try {
+              return lendVaultContract.interface.parseLog(log);
+            } catch {
+              return null;
+            }
+          })
+          .find((event: any) => event && event.name === "LoanFunded");
+
+        if (loanFundedEvent) {
+          blockchainLoanId = loanFundedEvent.args?.loanId?.toString();
+          console.log("Blockchain Loan ID extracted:", blockchainLoanId);
+        } else {
+          console.warn("LoanFunded event not found in receipt logs");
+        }
+      } catch (eventError) {
+        console.error("Error extracting loanId from event:", eventError);
+      }
+
       setTxStatus(TxStatus.SUCCESS);
       toast.success("Loan funded successfully! 🎉");
 
@@ -252,7 +275,8 @@ export function InvestModal({ loan, onClose, onSuccess, currentUserAddress }: In
             loanId: loan.id,
             lenderAddress: currentUserAddress,
             txHash: receipt.hash,
-            offerId: offerId
+            offerId: offerId,
+            blockchainLoanId: blockchainLoanId
           })
         });
 

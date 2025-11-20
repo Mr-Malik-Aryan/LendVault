@@ -147,3 +147,60 @@ export async function GET(request: NextRequest) {
     );
   }
 }
+
+export async function PATCH(request: NextRequest) {
+  try {
+    const body = await request.json();
+    const { loanId, status, repaymentTxHash, blockchainLoanId } = body;
+
+    if (!loanId) {
+      return Response.json(
+        {
+          success: false,
+          error: "loanId is required",
+        },
+        { status: 400 }
+      );
+    }
+
+    // Prepare update data
+    const updateData: any = {};
+    
+    if (status) {
+      updateData.status = status;
+    }
+    
+    if (repaymentTxHash) {
+      updateData.repaymentTxHash = repaymentTxHash;
+    }
+    
+    if (blockchainLoanId) {
+      updateData.loanId = blockchainLoanId;
+    }
+
+    // Update loan
+    const updatedLoan = await prisma.loan.update({
+      where: {
+        id: loanId,
+      },
+      data: updateData,
+    });
+
+    console.log(`[API /loans PATCH] Updated loan ${loanId}:`, updateData);
+
+    return Response.json({
+      success: true,
+      loan: updatedLoan,
+    });
+  } catch (error) {
+    console.error("[API /loans PATCH] Error updating loan:", error);
+    return Response.json(
+      {
+        success: false,
+        error: "Failed to update loan",
+        details: error instanceof Error ? error.message : "Unknown error",
+      },
+      { status: 500 }
+    );
+  }
+}
