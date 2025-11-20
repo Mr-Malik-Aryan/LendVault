@@ -48,8 +48,10 @@ model Loan {
   liquidatedAt      DateTime?
   
   txHash            String      // Transaction hash
+  repaymentTxHash   String?     // Repayment transaction hash
   contractAddress   String      // Deployed contract address
   offerId           String?     // stores blockchain offer ID
+  loanId            String?     // stores blockchain loan ID for funded loans
   createdAt         DateTime    @default(now())
   updatedAt         DateTime    @updatedAt
 

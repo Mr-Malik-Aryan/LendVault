@@ -9,7 +9,7 @@ const prisma = new PrismaClient();
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { loanId, lenderAddress, txHash, offerId } = body;
+    const { loanId, lenderAddress, txHash, offerId, blockchainLoanId } = body;
 
     // Validate required fields
     if (!loanId) {
@@ -93,13 +93,14 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Update the loan with lender information
+    // Update the loan with lender information and blockchain loanId
     const updatedLoan = await prisma.loan.update({
       where: { id: loanId },
       data: {
         lenderId: lender.id,
         status: "FUNDED", // Loan is now funded by a lender
         startDate: new Date(), // Update start date to when it was funded
+        loanId: blockchainLoanId, // Store blockchain loan ID for repayment
       },
       include: {
         borrower: true,

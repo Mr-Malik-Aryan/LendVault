@@ -16,7 +16,12 @@ const LENDVAULT_ABI = [
   "function getLoanOffer(uint256 _offerId) external view returns (tuple(uint256 offerId, address borrower, address nftContract, uint256 tokenId, uint256 requestedAmount, uint256 interestRate, uint256 duration, uint256 collateralValue, bool isActive, bool isFilled, uint256 createdAt))",
   "function getActiveOffers() external view returns (uint256[])",
   "function getUserOffers(address _user) external view returns (uint256[])",
-  "event OfferCreated(uint256 indexed offerId, address indexed borrower, address nftContract, uint256 tokenId, uint256 requestedAmount, uint256 interestRate, uint256 duration)"
+  "function getUserBorrowedLoans(address _borrower) external view returns (uint256[])",
+  "function repayLoan(uint256 _loanId) external payable",
+  "function calculateTotalDue(uint256 _loanId) external view returns (uint256)",
+  "function getLoan(uint256 _loanId) external view returns (tuple(uint256 loanId, uint256 offerId, address borrower, address lender, address nftContract, uint256 tokenId, uint256 loanAmount, uint256 interestRate, uint256 startTime, uint256 duration, uint256 dueDate, uint8 status))",
+  "event OfferCreated(uint256 indexed offerId, address indexed borrower, address nftContract, uint256 tokenId, uint256 requestedAmount, uint256 interestRate, uint256 duration)",
+  "event LoanRepaid(uint256 indexed loanId, address indexed borrower, address indexed lender, uint256 amountRepaid, uint256 timestamp)"
 ];
 
 // ERC721 ABI for NFT approval
@@ -69,6 +74,9 @@ export default function LoansPage() {
   const [txStatus, setTxStatus] = useState<TxStatus>(TxStatus.IDLE);
   const [txHash, setTxHash] = useState<string>("");
   const [offerId, setOfferId] = useState<string>("");
+  
+  // Repay state
+  const [repayingLoanId, setRepayingLoanId] = useState<string | null>(null);
 
   // Get contract address from environment variable
   const LENDVAULT_CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_LENDVAULT_CONTRACT_ADDRESS;
@@ -398,6 +406,163 @@ export default function LoansPage() {
     }
   };
 
+  const handleRepayLoan = async (loan: any) => {
+    if (!user?.walletAddress) {
+      toast.error("User wallet address not found. Please reconnect your wallet.");
+      return;
+    }
+
+    setRepayingLoanId(loan.id);
+    
+    try {
+      // Check if MetaMask is installed
+      if (!window.ethereum) {
+        throw new Error("Please install MetaMask to repay the loan");
+      }
+
+      // Get provider and signer
+      const provider = new ethers.BrowserProvider(window.ethereum);
+      const signer = await provider.getSigner();
+      
+      // Verify user is on correct network (Sepolia)
+      const network = await provider.getNetwork();
+      const chainId = Number(network.chainId);
+      
+      if (chainId !== 11155111) { // Sepolia chain ID
+        toast.error("Please switch to Sepolia testnet in MetaMask.");
+        setRepayingLoanId(null);
+        return;
+      }
+
+      // Create contract instance
+      const lendVaultContract = new ethers.Contract(
+        LENDVAULT_CONTRACT_ADDRESS,
+        LENDVAULT_ABI,
+        signer
+      );
+
+      let blockchainLoanId = loan.loanId;
+
+      // If loanId is missing, try to fetch it from blockchain using user's borrowed loans
+      if (!blockchainLoanId) {
+        toast.info("Fetching loan ID from blockchain...");
+        
+        try {
+          // Get all borrowed loans for this user from blockchain
+          const borrowedLoanIds = await lendVaultContract.getUserBorrowedLoans(user.walletAddress);
+          console.log("User's borrowed loan IDs from blockchain:", borrowedLoanIds.map((id: any) => id.toString()));
+          
+          // Find the loan that matches this offer
+          if (loan.offerId) {
+            for (const loanId of borrowedLoanIds) {
+              const loanDetails = await lendVaultContract.getLoan(loanId);
+              console.log(`Checking loan ${loanId.toString()}, offerId: ${loanDetails.offerId.toString()}`);
+              
+              // Check if this loan's offerId matches our database offerId
+              if (loanDetails.offerId.toString() === loan.offerId) {
+                blockchainLoanId = loanId.toString();
+                console.log("Found matching blockchain loan ID:", blockchainLoanId);
+                
+                // Update database with the found loanId
+                try {
+                  await fetch('/api/loans', {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      loanId: loan.id,
+                      blockchainLoanId: blockchainLoanId,
+                    })
+                  });
+                  toast.success("Blockchain loan ID found and saved!");
+                } catch (dbError) {
+                  console.warn("Failed to update database with loanId:", dbError);
+                }
+                
+                break;
+              }
+            }
+          }
+          
+          if (!blockchainLoanId) {
+            throw new Error("Could not find blockchain loan ID. The loan may not be funded yet.");
+          }
+        } catch (fetchError) {
+          console.error("Error fetching blockchain loan ID:", fetchError);
+          toast.error("Failed to fetch blockchain loan ID. The loan may not be funded on-chain yet.");
+          setRepayingLoanId(null);
+          return;
+        }
+      }
+
+      toast.info("Calculating repayment amount...");
+
+      console.log("Fetching repayment amount for blockchain loan ID:", blockchainLoanId);
+
+      // Get total amount due from smart contract
+      const totalDue = await lendVaultContract.calculateTotalDue(blockchainLoanId);
+      
+      console.log("Total amount due:", totalDue.toString(), "Wei");
+      
+      toast.info(`Repaying loan: ${totalDue.toString()} Wei`);
+
+      // Repay the loan
+      const repayTx = await lendVaultContract.repayLoan(blockchainLoanId, {
+        value: totalDue
+      });
+
+      toast.info("Transaction submitted! Waiting for confirmation...");
+      
+      // Wait for transaction confirmation
+      const receipt = await repayTx.wait();
+      
+      console.log("Loan repaid! Transaction hash:", receipt.hash);
+      
+      toast.success("Loan repaid successfully! Your NFT will be returned.");
+
+      // Update loan status in database
+      try {
+        const updateResponse = await fetch('/api/loans', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            loanId: loan.id,
+            status: 'REPAID',
+            repaymentTxHash: receipt.hash
+          })
+        });
+
+        if (!updateResponse.ok) {
+          console.warn("Failed to update loan status in database");
+        }
+      } catch (dbError) {
+        console.error("Database update error:", dbError);
+      }
+
+      // Refresh loans list
+      setTimeout(() => {
+        fetch(`/api/loans?walletAddress=${user?.walletAddress}`)
+          .then(res => res.json())
+          .then(data => setLoans(data.borrowedLoans || []))
+          .catch(err => console.error("Failed to refresh loans:", err));
+      }, 2000);
+
+    } catch (err: any) {
+      console.error("Error repaying loan:", err);
+      
+      if (err.code === 4001) {
+        toast.error("Transaction rejected by user");
+      } else if (err.code === "INSUFFICIENT_FUNDS") {
+        toast.error("Insufficient funds to repay the loan");
+      } else if (err.message?.includes("user rejected")) {
+        toast.error("Transaction rejected by user");
+      } else {
+        toast.error(err.message || "Failed to repay loan");
+      }
+    } finally {
+      setRepayingLoanId(null);
+    }
+  };
+
   // Small helper to format large Wei numbers with commas for readability
   const formatWei = (raw: string | number) => {
     try {
@@ -537,12 +702,21 @@ export default function LoansPage() {
                         {new Date(loan.dueDate).toLocaleDateString()}
                       </span>
                     </div>
+                    {/* Debug info - remove in production */}
+                    {loan.status === 'FUNDED' && (
+                      <div className="flex justify-between text-xs">
+                        <span className="text-muted-foreground">Blockchain Loan ID:</span>
+                        <span className="text-foreground font-mono">
+                          {loan.loanId || "Not set"}
+                        </span>
+                      </div>
+                    )}
                   </div>
 
                   <div className="mt-4 pt-4 border-t border-border">
                     <Button 
                       variant="outline" 
-                      className="w-full"
+                      className="w-full mb-2"
                       onClick={() => {
                         if (loan.txHash) {
                           window.open(`https://sepolia.etherscan.io/tx/${loan.txHash}`, '_blank');
@@ -553,6 +727,23 @@ export default function LoansPage() {
                     >
                       View on Etherscan
                     </Button>
+                    
+                    {loan.status === 'FUNDED' && (
+                      <Button 
+                        className="w-full bg-green-600 hover:bg-green-700 text-white"
+                        onClick={() => handleRepayLoan(loan)}
+                        disabled={repayingLoanId === loan.id}
+                      >
+                        {repayingLoanId === loan.id ? (
+                          <span className="flex items-center gap-2">
+                            <Loader className="w-4 h-4 animate-spin" />
+                            Repaying...
+                          </span>
+                        ) : (
+                          "Repay Loan"
+                        )}
+                      </Button>
+                    )}
                   </div>
                 </div>
               ))}
@@ -693,6 +884,9 @@ export default function LoansPage() {
                       required
                       disabled={submitting}
                     >
+                      <option value="0.0007">1 Minute</option>
+                      <option value="1">1 Day</option>
+                      <option value="3">3 Days</option>
                       <option value="7">7 Days</option>
                       <option value="14">14 Days</option>
                       <option value="30">30 Days</option>
