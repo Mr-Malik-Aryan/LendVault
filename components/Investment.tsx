@@ -7,7 +7,7 @@ import { toast } from "sonner";
 import { ethers } from "ethers";
 
 // YOUR DEPLOYED CONTRACT ADDRESS - MUST MATCH LOANS PAGE!
-const LENDVAULT_CONTRACT_ADDRESS = "0x899054c1aB95d1b9bf15de16C51E3711564bDe67";
+const LENDVAULT_CONTRACT_ADDRESS = "0xd8b934580fcE35a11B58C6D73aDeE468a2833fa8";
 
 // Smart Contract ABI for lender functions
 const LENDVAULT_ABI = [

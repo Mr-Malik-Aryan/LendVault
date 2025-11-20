@@ -79,7 +79,7 @@ export default function LoansPage() {
   const [repayingLoanId, setRepayingLoanId] = useState<string | null>(null);
 
   // YOUR DEPLOYED CONTRACT ADDRESS - UPDATE THIS!
-  const LENDVAULT_CONTRACT_ADDRESS = "0x899054c1aB95d1b9bf15de16C51E3711564bDe67"; // TODO: Replace with your deployed contract
+  const LENDVAULT_CONTRACT_ADDRESS = "0xd8b934580fcE35a11B58C6D73aDeE468a2833fa8"; // TODO: Replace with your deployed contract
 
   // Interest rate options
   const interestRateOptions = [
