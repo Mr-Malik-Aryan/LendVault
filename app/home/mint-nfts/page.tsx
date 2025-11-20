@@ -12,11 +12,7 @@ import { ethers } from "ethers";
 const TESTNET_NFT_CONTRACT_ADDRESS = "0x3dFa911d14112fdbEA9a414Cc41F4C8613bD11a3";
 const TESTNET_NFT_ABI = [
   "function safeMint(address to, string memory uri) public returns (uint256)",
-  "function mint(address to, string memory uri) public returns (uint256)",
-  "function publicMint(address to, string memory uri) public returns (uint256)",
   "function owner() public view returns (address)",
-  "function hasRole(bytes32 role, address account) public view returns (bool)",
-  "function MINTER_ROLE() public view returns (bytes32)",
 ];
 
 const PINATA_API_KEY = process.env.NEXT_PUBLIC_PINATA_API_KEY;
@@ -174,67 +170,8 @@ export default function MintNFTPage() {
         signer
       );
 
-      // Check if user has minting permissions
-      try {
-        const contractOwner = await nftContract.owner();
-        console.log("Contract owner:", contractOwner);
-        console.log("User address:", userAddress);
-
-        // Try to check if the contract uses role-based access control
-        try {
-          const minterRole = await nftContract.MINTER_ROLE();
-          const hasMinterRole = await nftContract.hasRole(minterRole, userAddress);
-          console.log("Has minter role:", hasMinterRole);
-
-          if (!hasMinterRole && contractOwner.toLowerCase() !== userAddress.toLowerCase()) {
-            throw new Error(
-              "You don't have permission to mint NFTs. Please contact the contract owner to grant you the MINTER_ROLE."
-            );
-          }
-        } catch (roleErr) {
-          // Contract might not use role-based access control
-          console.log("Role check not available, proceeding with mint...");
-        }
-      } catch (ownerErr) {
-        console.log("Could not verify permissions:", ownerErr);
-      }
-
-      let tx;
-      let mintError: any = null;
-
-      // Try different minting methods in order
-      const mintMethods = [
-        { name: "publicMint", fn: () => nftContract.publicMint(userAddress, metadataIpfsUrl) },
-        { name: "mint", fn: () => nftContract.mint(userAddress, metadataIpfsUrl) },
-        { name: "safeMint", fn: () => nftContract.safeMint(userAddress, metadataIpfsUrl) },
-      ];
-
-      for (const method of mintMethods) {
-        try {
-          console.log(`Trying ${method.name}...`);
-          tx = await method.fn();
-          console.log(`${method.name} successful! Transaction hash:`, tx.hash);
-          break; // Success, exit loop
-        } catch (err: any) {
-          console.log(`${method.name} failed:`, err.message);
-          mintError = err;
-          
-          // If it's an access control error, throw immediately with helpful message
-          if (
-            err.message.includes("AccessControl") ||
-            err.message.includes("Ownable") ||
-            err.data?.includes("0x118cdaa7")
-          ) {
-            throw new Error(
-              "Access Denied: You don't have permission to mint NFTs. The contract owner needs to grant you minting permissions first. Please contact the contract administrator."
-            );
-          }
-        }
-      }
-
-      if (!tx) {
-        throw mintError || new Error("All minting methods failed");
-      }
+      const tx = await nftContract.safeMint(userAddress, metadataIpfsUrl);
+      console.log("Transaction hash:", tx.hash);
 
       // Wait for confirmation
       const receipt = await tx.wait();
