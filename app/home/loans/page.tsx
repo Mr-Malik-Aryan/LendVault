@@ -74,6 +74,9 @@ export default function LoansPage() {
   const [txStatus, setTxStatus] = useState<TxStatus>(TxStatus.IDLE);
   const [txHash, setTxHash] = useState<string>("");
   const [offerId, setOfferId] = useState<string>("");
+  
+  // Repay state
+  const [repayingLoanId, setRepayingLoanId] = useState<string | null>(null);
 
   // Get contract address from environment variable
   const LENDVAULT_CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_LENDVAULT_CONTRACT_ADDRESS;
