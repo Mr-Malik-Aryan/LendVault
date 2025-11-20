@@ -141,7 +141,7 @@ export default function MintNFTPage() {
                   {nfts.map((nft, index) => {
                     // Extract value from attributes array - value is in Wei
                     const valueAttribute = nft.metadata.attributes?.[0]?.value || 0;
-                    const weiValue = valueAttribute?.value || '0';
+                    const weiValue = valueAttribute|| '0';
                     
                     // Helper to format Wei with commas for readability
                     const formatWei = (value: string) => {

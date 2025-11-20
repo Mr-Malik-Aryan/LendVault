@@ -1,0 +1,14 @@
+
+{ 
+ "name": "Strawhat",
+  "description": "Strawhat wants to be king of the pirates",
+  "image": "ipfs://bafkreicw2ziyhmut2ljkwlz67nryvaejyd2o5ksrhqodm47u4nsxuglocu",
+  "attributes": [
+    {
+      "trait_type": "Logo",
+      "value": "2000"
+    }
+   
+    
+  ]
+}
