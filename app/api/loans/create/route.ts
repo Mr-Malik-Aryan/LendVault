@@ -18,7 +18,7 @@ export async function POST(request: NextRequest) {
       network,
       dueDate,
       txHash, // Actual transaction hash from blockchain
-      offerId, // Offer ID from smart contract
+      offerId, // Offer ID from smart contract - IMPORTANT for lender funding
       contractAddress, // Smart contract address
     } = body;
 
@@ -44,6 +44,13 @@ export async function POST(request: NextRequest) {
         },
         { status: 400 }
       );
+    }
+
+    // Validate offerId if provided (should be provided from blockchain)
+    if (offerId) {
+      console.log("Blockchain offerId received:", offerId);
+    } else {
+      console.warn("No offerId provided - loan created without blockchain reference");
     }
 
     // Find user by wallet address
@@ -117,7 +124,7 @@ export async function POST(request: NextRequest) {
     // Calculate LTV ratio (convert to float for storage)
     const ltvRatio = Number(loanAmountWei) / Number(collateralValueWei);
 
-    // Create the loan
+    // Create the loan with offerId
     const loan = await prisma.loan.create({
       data: {
         borrowerId,
@@ -133,6 +140,7 @@ export async function POST(request: NextRequest) {
         dueDate: new Date(dueDate),
         txHash: actualTxHash,
         contractAddress: actualContractAddress,
+        offerId: offerId || null, // ✅ STORE THE BLOCKCHAIN OFFER ID
       },
     });
 
@@ -164,11 +172,12 @@ export async function POST(request: NextRequest) {
 
     console.log("Loan created successfully:", {
       loanId: loan.id,
-      offerId: offerId,
+      offerId: offerId || "N/A",
       txHash: actualTxHash,
       borrower: walletAddress,
       amount: amount,
       collateralId: collateralId,
+      contractAddress: actualContractAddress,
     });
 
     return Response.json({
@@ -184,7 +193,7 @@ export async function POST(request: NextRequest) {
         dueDate: loan.dueDate,
         txHash: loan.txHash,
         contractAddress: loan.contractAddress,
-        offerId: offerId, // Return offerId for reference
+        offerId: offerId || null, //  Return offerId in response
       },
       collateral: {
         id: collateral.id,
@@ -194,7 +203,7 @@ export async function POST(request: NextRequest) {
       message: "Loan offer created successfully on blockchain and saved to database",
     });
   } catch (error) {
-    console.error("❌ Error creating loan:", error);
+    console.error("Error creating loan:", error);
     return Response.json(
       {
         success: false,

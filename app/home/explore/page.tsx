@@ -18,6 +18,7 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { Star } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { InvestModal } from "@/components/Investment";
 
 interface Loan {
   id: string;
@@ -32,6 +33,10 @@ interface Loan {
   status: string;
   dueDate: string;
   createdAt: string;
+  txHash: string;
+  contractAddress: string;
+  offerId: string | null;
+  ltvRatio: number;
   borrower: {
     id: string;
     username: string;
@@ -61,6 +66,10 @@ export default function ExplorePage() {
   const [minAmount, setMinAmount] = useState("");
   const [maxAmount, setMaxAmount] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
+  
+  // Investment modal state
+  const [selectedLoan, setSelectedLoan] = useState<Loan | null>(null);
+  const [showInvestModal, setShowInvestModal] = useState(false);
 
   useEffect(() => {
     if (!loading && !isAuthenticated) {
@@ -217,13 +226,20 @@ export default function ExplorePage() {
     setFilteredLoans(filtered);
   }, [searchTerm, minInterestRate, maxInterestRate, minAmount, maxAmount, loans]);
 
-  const handleInvest = async (loan: Loan) => {
+  const handleInvest = (loan: Loan) => {
     if (loan.isOwnLoan) {
       toast.error("You cannot invest in your own loan");
       return;
     }
-    toast.success(`Investing in loan ${loan.id}...`);
-    // Implement investment logic here
+    setSelectedLoan(loan);
+    setShowInvestModal(true);
+  };
+
+  const handleInvestSuccess = () => {
+    // Refresh loans list after successful investment
+    fetchLoans();
+    setShowInvestModal(false);
+    setSelectedLoan(null);
   };
 
   const formatDate = (dateString: string) => {
@@ -504,6 +520,19 @@ export default function ExplorePage() {
           )}
         </div>
       </main>
+
+      {/* Investment Modal */}
+      {showInvestModal && selectedLoan && (
+        <InvestModal
+          loan={selectedLoan}
+          onClose={() => {
+            setShowInvestModal(false);
+            setSelectedLoan(null);
+          }}
+          onSuccess={handleInvestSuccess}
+          currentUserAddress={user?.walletAddress}
+        />
+      )}
     </div>
   );
 }

@@ -49,7 +49,7 @@ model Loan {
   
   txHash            String      // Transaction hash
   contractAddress   String      // Deployed contract address
-  
+  offerId           String?     // stores blockchain offer ID
   createdAt         DateTime    @default(now())
   updatedAt         DateTime    @updatedAt
 
