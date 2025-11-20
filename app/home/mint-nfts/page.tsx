@@ -23,7 +23,6 @@ interface MintFormData {
   description: string;
   value: string;
   image: File | null;
-  recipientAddress: string;
 }
 
 export default function MintNFTPage() {
@@ -36,7 +35,6 @@ export default function MintNFTPage() {
     description: "",
     value: "",
     image: null,
-    recipientAddress: "",
   });
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [minting, setMinting] = useState(false);
@@ -127,16 +125,6 @@ export default function MintNFTPage() {
         throw new Error("Please fill in all fields and select an image");
       }
 
-      // Validate recipient address
-      if (!mintFormData.recipientAddress) {
-        throw new Error("Please enter a recipient wallet address");
-      }
-
-      // Validate recipient address format
-      if (!ethers.isAddress(mintFormData.recipientAddress)) {
-        throw new Error("Invalid wallet address format");
-      }
-
       // Check MetaMask
       if (!window.ethereum) {
         throw new Error("MetaMask not installed");
@@ -145,6 +133,7 @@ export default function MintNFTPage() {
       // Get provider and signer
       const provider = new ethers.BrowserProvider(window.ethereum);
       const signer = await provider.getSigner();
+      const userAddress = await signer.getAddress();
 
       // Verify network
       const network = await provider.getNetwork();
@@ -173,7 +162,7 @@ export default function MintNFTPage() {
       const metadataIpfsUrl = await uploadMetadataToPinata(metadata);
       console.log("Metadata uploaded:", metadataIpfsUrl);
 
-      // Step 3: Mint NFT on contract to recipient address
+      // Step 3: Mint NFT on contract
       console.log("Minting NFT on blockchain...");
       const nftContract = new ethers.Contract(
         TESTNET_NFT_CONTRACT_ADDRESS,
@@ -181,15 +170,15 @@ export default function MintNFTPage() {
         signer
       );
 
-      const tx = await nftContract.safeMint(mintFormData.recipientAddress, metadataIpfsUrl);
+      const tx = await nftContract.safeMint(userAddress, metadataIpfsUrl);
       console.log("Transaction hash:", tx.hash);
 
       // Wait for confirmation
       const receipt = await tx.wait();
       console.log("NFT minted successfully:", receipt);
 
-      setMintSuccess(`NFT minted successfully to ${mintFormData.recipientAddress}!`);
-      setMintFormData({ name: "", description: "", value: "", image: null, recipientAddress: "" });
+      setMintSuccess("NFT minted successfully!");
+      setMintFormData({ name: "", description: "", value: "", image: null });
       setImagePreview(null);
 
       // Reset form after 2 seconds
@@ -205,7 +194,7 @@ export default function MintNFTPage() {
   };
 
   const handleReset = () => {
-    setMintFormData({ name: "", description: "", value: "", image: null, recipientAddress: "" });
+    setMintFormData({ name: "", description: "", value: "", image: null });
     setImagePreview(null);
     setMintError(null);
     setMintSuccess(null);
@@ -239,37 +228,14 @@ export default function MintNFTPage() {
           {/* Mint NFT Form */}
           <div className="bg-card border border-border rounded-xl p-8">
             <form onSubmit={handleMintNFT} className="space-y-6">
-              {/* Current Wallet */}
+              {/* Connected Wallet */}
               <div>
                 <label className="block text-sm font-medium text-foreground mb-2">
-                  Current Wallet Address (Payer)
+                  Connected Wallet Address
                 </label>
                 <div className="w-full px-4 py-3 bg-background border border-input rounded-lg text-foreground font-mono text-sm break-all cursor-not-allowed opacity-75">
                   {user?.walletAddress}
                 </div>
-                <p className="text-xs text-muted-foreground mt-2">
-                  This wallet will pay for the minting transaction
-                </p>
-              </div>
-
-              {/* Recipient Wallet Address */}
-              <div>
-                <label className="block text-sm font-medium text-foreground mb-2">
-                  Recipient Wallet Address *
-                </label>
-                <input
-                  type="text"
-                  value={mintFormData.recipientAddress}
-                  onChange={(e) =>
-                    setMintFormData((prev) => ({ ...prev, recipientAddress: e.target.value }))
-                  }
-                  className="w-full px-4 py-3 bg-background border border-input rounded-lg text-foreground focus:ring-2 focus:ring-ring outline-none transition font-mono text-sm"
-                  placeholder="0x..."
-                  required
-                />
-                <p className="text-xs text-muted-foreground mt-2">
-                  The NFT will be minted to this wallet address
-                </p>
               </div>
 
               {/* NFT Name */}
