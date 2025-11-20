@@ -20,6 +20,13 @@ export default function GetETHPage() {
 
   const faucets = [
     {
+      name: "Google Cloud Web3 Faucet",
+      network: "Sepolia",
+      url: "https://cloud.google.com/application/web3/faucet/ethereum/sepolia",
+      description: "Get testnet ETH for Sepolia network from Google Cloud",
+      recommended: true,
+    },
+    {
       name: "Sepolia Faucet",
       network: "Sepolia",
       url: "https://www.sepoliafaucet.io/",
@@ -91,9 +98,19 @@ export default function GetETHPage() {
           </div>
 
           {/* Faucets Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {faucets.map((faucet) => (
-              <div key={faucet.network} className="bg-card border border-border rounded-lg p-6 hover:border-primary/50 transition-colors">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {faucets.map((faucet, index) => (
+              <div 
+                key={`${faucet.network}-${index}`} 
+                className={`bg-card border rounded-lg p-6 hover:border-primary/50 transition-colors relative ${
+                  faucet.recommended ? 'border-primary' : 'border-border'
+                }`}
+              >
+                {faucet.recommended && (
+                  <div className="absolute -top-3 left-4 bg-primary text-primary-foreground text-xs font-semibold px-3 py-1 rounded-full">
+                    Recommended
+                  </div>
+                )}
                 <h3 className="text-lg font-semibold text-foreground mb-2">{faucet.name}</h3>
                 <p className="text-sm text-muted-foreground mb-4">{faucet.description}</p>
                 <p className="text-xs text-primary mb-4 font-medium">{faucet.network}</p>

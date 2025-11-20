@@ -39,6 +39,7 @@ model Loan {
   collateralType    String      // NFT, ERC20, etc.
   collateralId      String      // Token ID or contract address
   collateralValue   String      // Estimated value in wei
+  ltvRatio          Float       @default(0.8) // Loan-to-Value ratio (max 80%)
   
   status            LoanStatus  @default(ACTIVE)
   startDate         DateTime    @default(now())
@@ -51,6 +52,10 @@ model Loan {
   
   createdAt         DateTime    @default(now())
   updatedAt         DateTime    @updatedAt
+
+  @@index([borrowerId])
+  @@index([lenderId])
+  @@index([status])
 }
 
 enum LoanStatus {

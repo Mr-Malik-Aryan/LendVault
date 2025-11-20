@@ -38,7 +38,7 @@ export function useNFTs() {
   const fetchNFTs = useCallback(
     async (
       walletAddress: string,
-      contractAddress: string,
+      contractAddress?: string,
       network: string = "sepolia"
     ): Promise<FetchNFTsResponse> => {
       setLoading(true);
@@ -46,9 +46,9 @@ export function useNFTs() {
       setNfts([]); // Clear previous NFTs
 
       try {
-        // Validate inputs
-        if (!walletAddress || !contractAddress) {
-          const errorMsg = "Wallet address and contract address are required";
+        // Validate inputs - only wallet address is required
+        if (!walletAddress) {
+          const errorMsg = "Wallet address is required";
           setError(errorMsg);
           return { success: false, error: errorMsg };
         }
@@ -56,9 +56,13 @@ export function useNFTs() {
         // Build URL with proper encoding
         const params = new URLSearchParams({
           walletAddress: walletAddress.trim(),
-          contractAddress: contractAddress.trim(),
           network: network.trim(),
         });
+
+        // Add contractAddress only if provided
+        if (contractAddress && contractAddress.trim()) {
+          params.append('contractAddress', contractAddress.trim());
+        }
 
         const response = await fetch(`/api/nft/fetch?${params.toString()}`);
 

@@ -66,7 +66,7 @@ export default function MintNFTPage() {
         </h1>
 
         {/* Fetch NFTs Section */}
-        <div className="bg-card border border-border rounded-xl p-6 mb-8">
+        <div className="bg-card border border-border rounded-xl p-6 mb-8 max-w-lg">
           <h2 className="text-2xl font-bold text-foreground mb-6">
             Fetch Your Testnet NFTs
           </h2>
@@ -137,51 +137,79 @@ export default function MintNFTPage() {
                 <h2 className="text-2xl font-bold text-foreground mb-6">
                   Your NFTs ({nfts.length})
                 </h2>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {nfts.map((nft) => (
-                    <div
-                      key={nft.tokenId}
-                      className="bg-card border border-border rounded-xl overflow-hidden hover:border-primary transition-colors"
-                    >
-                      {/* Image */}
-                      {nft.image ? (
-                        <div className="w-full h-48 bg-secondary flex items-center justify-center overflow-hidden">
-                          <img
-                            src={nft.image}
-                            alt={nft.metadata.name}
-                            className="w-full h-full object-cover hover:scale-105 transition-transform"
-                          />
-                        </div>
-                      ) : (
-                        <div className="w-full h-48 bg-secondary flex items-center justify-center">
-                          <span className="text-muted-foreground">No Image</span>
-                        </div>
-                      )}
-
-                      {/* Info */}
-                      <div className="p-4 space-y-2">
-                        <h3 className="text-lg font-semibold text-foreground">
-                          {nft.metadata.name || `${nft.contractSymbol} #${nft.tokenId}`}
-                        </h3>
-                        <p className="text-sm text-muted-foreground">
-                          {nft.contractName}
-                        </p>
-                        <p className="text-xs font-mono text-primary">
-                          Token ID: {nft.tokenId}
-                        </p>
-                        {nft.metadata.description && (
-                          <p className="text-sm text-muted-foreground line-clamp-2">
-                            {nft.metadata.description}
-                          </p>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                  {nfts.map((nft, index) => {
+                    // Extract value from attributes (Rarity or any value trait)
+                    const valueAttribute = nft.metadata.attributes?.find((attr: any) => 
+                      attr.trait_type?.toLowerCase().includes('value') || 
+                      attr.trait_type?.toLowerCase().includes('rarity')
+                    );
+                    const ethValue = valueAttribute?.value || '0';
+                    
+                    return (
+                      <div
+                        key={`${nft.contractAddress}-${nft.tokenId}-${index}`}
+                        className="bg-card border border-border rounded-lg overflow-hidden hover:border-primary transition-all hover:shadow-lg cursor-pointer group"
+                      >
+                        {/* Image */}
+                        {nft.image ? (
+                          <div className="w-full h-64 bg-secondary flex items-center justify-center overflow-hidden relative">
+                            <img
+                              src={nft.image}
+                              alt={nft.metadata.name}
+                              className="w-full h-full object-cover scale-110 group-hover:scale-100 transition-transform duration-500 ease-in-out"
+                            />
+                          </div>
+                        ) : (
+                          <div className="w-full h-64 bg-secondary flex items-center justify-center">
+                            <span className="text-muted-foreground">No Image</span>
+                          </div>
                         )}
 
-                        {/* Use NFT Button */}
-                        <Button className="w-full mt-4 bg-primary hover:bg-primary/90 text-primary-foreground">
-                          Use as Collateral
-                        </Button>
+                        {/* Info - Dark Background */}
+                        <div className="bg-black p-4 space-y-2">
+                          {/* NFT Name */}
+                          <h3 className="text-base font-semibold text-white truncate">
+                            {nft.metadata.name || `${nft.contractSymbol} #${nft.tokenId}`}
+                          </h3>
+                          
+                          {/* ETH Value and Last Sale */}
+                          <div className="space-y-1">
+                            <div className="flex items-baseline gap-2">
+                              <span className="text-2xl font-bold text-white">
+                                {ethValue}
+                              </span>
+                              <span className="text-sm text-gray-400">ETH</span>
+                            </div>
+                            <div className="flex items-center gap-1 text-xs text-gray-400">
+                              <span>Last sale</span>
+                              <span className="font-semibold text-white">{ethValue}</span>
+                              <span>ETH</span>
+                            </div>
+                          </div>
+
+                          {/* Additional Info - Collapsible on hover */}
+                          <div className="pt-2 border-t border-gray-800 space-y-1 text-xs">
+                            <div className="flex justify-between">
+                              <span className="text-gray-400">Token ID:</span>
+                              <span className="text-white font-mono">{nft.tokenId}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-gray-400">Contract:</span>
+                              <span className="text-white font-mono">
+                                {nft.contractAddress.slice(0, 6)}...{nft.contractAddress.slice(-4)}
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Use as Collateral Button */}
+                          <Button className="w-full mt-3 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold">
+                            Use as Collateral
+                          </Button>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </>
             ) : (
