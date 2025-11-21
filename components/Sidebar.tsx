@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { Compass, FileText, Menu, User, Wand2, X, Zap } from "lucide-react";
 import Link from "next/link";
-import { Menu, X, Compass, Zap, FileText, Wand2, User } from "lucide-react";
+import { useState } from "react";
 
 interface SidebarProps {
   username?: string;
