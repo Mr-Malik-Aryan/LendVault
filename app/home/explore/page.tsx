@@ -1,9 +1,9 @@
 "use client";
 
-import { useAuth } from "@/hooks/useAuth";
-import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { InvestModal } from "@/components/Investment";
 import { Sidebar } from "@/components/Sidebar";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -14,11 +14,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Badge } from "@/components/ui/badge";
-import { toast } from "sonner";
+import { useAuth } from "@/hooks/useAuth";
 import { Star } from "lucide-react";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { InvestModal } from "@/components/Investment";
+import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
+import { toast } from "sonner";
 
 interface Loan {
   id: string;
@@ -66,7 +66,7 @@ export default function ExplorePage() {
   const [minAmount, setMinAmount] = useState("");
   const [maxAmount, setMaxAmount] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
-  
+
   // Investment modal state
   const [selectedLoan, setSelectedLoan] = useState<Loan | null>(null);
   const [showInvestModal, setShowInvestModal] = useState(false);
@@ -81,6 +81,7 @@ export default function ExplorePage() {
     if (user?.id) {
       fetchLoans();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, sortBy, sortOrder]);
 
   const fetchLoans = async () => {
@@ -90,7 +91,8 @@ export default function ExplorePage() {
         userId: user?.id || "",
       });
 
-      const response = await fetch(`/api/loans?${params}`);
+      // ✅ fixed: use backticks for template string
+      const response = await fetch(`/api/loans?${params.toString()}`);
       const data = await response.json();
 
       console.log("Explore page - API response:", data);
@@ -105,31 +107,40 @@ export default function ExplorePage() {
           return;
         }
 
+        // ✅ fixed: console log template string
         console.log(`Found ${data.allLoans.length} loans`);
 
-        // Process all loans and add computed fields
-        const processedLoans = data.allLoans.map((loan: any) => {
-          const amountInEth = parseFloat(loan.amount) / 1e18;
-          const interestRatePercent = parseFloat(loan.interestRate) / 100;
-          const durationInDays = loan.duration / 86400;
-          const totalReturn = amountInEth * (1 + (interestRatePercent / 100) * (durationInDays / 365));
-          const profit = totalReturn - amountInEth;
-          
-          return {
-            ...loan,
-            amountInEth,
-            interestRatePercent,
-            durationInDays,
-            totalReturn,
-            profit,
-            isOwnLoan: loan.borrowerId === user?.id,
-          };
-        });
+        // Process loans: only ACTIVE / FUNDED + computed fields
+        const processedLoans: Loan[] = data.allLoans
+          .filter(
+            (loan: any) =>
+              loan.status === "ACTIVE" || loan.status === "FUNDED"
+          )
+          .map((loan: any) => {
+            const amountInEth = parseFloat(loan.amount) / 1e18;
+            const interestRatePercent = parseFloat(loan.interestRate) / 100;
+            const durationInDays = loan.duration / 86400;
+            const totalReturn =
+              amountInEth *
+              (1 + (interestRatePercent / 100) * (durationInDays / 365));
+            const profit = totalReturn - amountInEth;
+
+            return {
+              ...loan,
+              amountInEth,
+              interestRatePercent,
+              durationInDays,
+              totalReturn,
+              profit,
+              isOwnLoan: loan.borrowerId === user?.id,
+            } as Loan;
+          });
 
         // Apply sorting
         const sortedLoans = [...processedLoans].sort((a, b) => {
-          let aValue, bValue;
-          
+          let aValue: number;
+          let bValue: number;
+
           if (sortBy === "interestRate") {
             aValue = a.interestRatePercent;
             bValue = b.interestRatePercent;
@@ -143,7 +154,7 @@ export default function ExplorePage() {
             aValue = new Date(a.createdAt).getTime();
             bValue = new Date(b.createdAt).getTime();
           }
-          
+
           return sortOrder === "desc" ? bValue - aValue : aValue - bValue;
         });
 
@@ -167,20 +178,33 @@ export default function ExplorePage() {
   const applyFilters = () => {
     let filtered = [...loans];
 
+    // Keep only ACTIVE / FUNDED (safety)
+    filtered = filtered.filter(
+      (loan) => loan.status === "ACTIVE" || loan.status === "FUNDED"
+    );
+
     // Apply interest rate filters
     if (minInterestRate) {
-      filtered = filtered.filter(loan => loan.interestRatePercent >= parseFloat(minInterestRate));
+      filtered = filtered.filter(
+        (loan) => loan.interestRatePercent >= parseFloat(minInterestRate)
+      );
     }
     if (maxInterestRate) {
-      filtered = filtered.filter(loan => loan.interestRatePercent <= parseFloat(maxInterestRate));
+      filtered = filtered.filter(
+        (loan) => loan.interestRatePercent <= parseFloat(maxInterestRate)
+      );
     }
 
     // Apply amount filters
     if (minAmount) {
-      filtered = filtered.filter(loan => loan.amountInEth >= parseFloat(minAmount));
+      filtered = filtered.filter(
+        (loan) => loan.amountInEth >= parseFloat(minAmount)
+      );
     }
     if (maxAmount) {
-      filtered = filtered.filter(loan => loan.amountInEth <= parseFloat(maxAmount));
+      filtered = filtered.filter(
+        (loan) => loan.amountInEth <= parseFloat(maxAmount)
+      );
     }
 
     setFilteredLoans(filtered);
@@ -197,34 +221,56 @@ export default function ExplorePage() {
     setFilteredLoans(loans);
   };
 
+  // Search + filters reactive
   useEffect(() => {
     let filtered = [...loans];
 
+    // Always ensure we only show ACTIVE / FUNDED in explore
+    filtered = filtered.filter(
+      (loan) => loan.status === "ACTIVE" || loan.status === "FUNDED"
+    );
+
     // Apply search filter
     if (searchTerm) {
-      filtered = filtered.filter(loan => 
-        loan.borrower.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        loan.borrower.walletAddress.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        loan.id.toLowerCase().includes(searchTerm.toLowerCase())
+      const q = searchTerm.toLowerCase();
+      filtered = filtered.filter((loan) =>
+        (loan.borrower?.username || "").toLowerCase().includes(q) ||
+        (loan.borrower?.walletAddress || "").toLowerCase().includes(q) ||
+        loan.id.toLowerCase().includes(q)
       );
     }
 
     // Apply numeric filters
     if (minInterestRate) {
-      filtered = filtered.filter(loan => loan.interestRatePercent >= parseFloat(minInterestRate));
+      filtered = filtered.filter(
+        (loan) => loan.interestRatePercent >= parseFloat(minInterestRate)
+      );
     }
     if (maxInterestRate) {
-      filtered = filtered.filter(loan => loan.interestRatePercent <= parseFloat(maxInterestRate));
+      filtered = filtered.filter(
+        (loan) => loan.interestRatePercent <= parseFloat(maxInterestRate)
+      );
     }
     if (minAmount) {
-      filtered = filtered.filter(loan => loan.amountInEth >= parseFloat(minAmount));
+      filtered = filtered.filter(
+        (loan) => loan.amountInEth >= parseFloat(minAmount)
+      );
     }
     if (maxAmount) {
-      filtered = filtered.filter(loan => loan.amountInEth <= parseFloat(maxAmount));
+      filtered = filtered.filter(
+        (loan) => loan.amountInEth <= parseFloat(maxAmount)
+      );
     }
 
     setFilteredLoans(filtered);
-  }, [searchTerm, minInterestRate, maxInterestRate, minAmount, maxAmount, loans]);
+  }, [
+    searchTerm,
+    minInterestRate,
+    maxInterestRate,
+    minAmount,
+    maxAmount,
+    loans,
+  ]);
 
   const handleInvest = (loan: Loan) => {
     if (loan.isOwnLoan) {
@@ -243,10 +289,10 @@ export default function ExplorePage() {
   };
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric'
+    return new Date(dateString).toLocaleDateString("en-US", {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
     });
   };
 
@@ -271,9 +317,12 @@ export default function ExplorePage() {
       <main className="pl-20 md:pl-64 p-8">
         <div className="max-w-7xl mx-auto">
           <div className="mb-8">
-            <h1 className="text-4xl font-bold text-foreground mb-2">Explore Loans</h1>
+            <h1 className="text-4xl font-bold text-foreground mb-2">
+              Explore Loans
+            </h1>
             <p className="text-muted-foreground">
-              Discover investment opportunities and earn returns by lending to borrowers.
+              Discover investment opportunities and earn returns by lending to
+              borrowers.
             </p>
           </div>
 
@@ -294,7 +343,9 @@ export default function ExplorePage() {
               <div className="flex flex-wrap items-center gap-3">
                 {/* Interest Rate Range */}
                 <div className="flex items-center gap-2">
-                  <span className="text-xs text-muted-foreground whitespace-nowrap">Interest:</span>
+                  <span className="text-xs text-muted-foreground whitespace-nowrap">
+                    Interest:
+                  </span>
                   <Input
                     type="number"
                     placeholder="Min %"
@@ -316,7 +367,9 @@ export default function ExplorePage() {
 
                 {/* Amount Range */}
                 <div className="flex items-center gap-2">
-                  <span className="text-xs text-muted-foreground whitespace-nowrap">Amount:</span>
+                  <span className="text-xs text-muted-foreground whitespace-nowrap">
+                    Amount:
+                  </span>
                   <Input
                     type="number"
                     placeholder="Min"
@@ -336,7 +389,7 @@ export default function ExplorePage() {
                   />
                 </div>
 
-                <div className="h-6 w-px bg-border"></div>
+                <div className="h-6 w-px bg-border" />
 
                 {/* Sort By */}
                 <Select value={sortBy} onValueChange={setSortBy}>
@@ -363,7 +416,12 @@ export default function ExplorePage() {
                 </Select>
 
                 {/* Reset Button */}
-                <Button onClick={resetFilters} variant="outline" size="sm" className="h-9 ml-auto">
+                <Button
+                  onClick={resetFilters}
+                  variant="outline"
+                  size="sm"
+                  className="h-9 ml-auto"
+                >
                   Reset
                 </Button>
               </div>
@@ -372,21 +430,24 @@ export default function ExplorePage() {
 
           {/* Loans Grid */}
           {loadingLoans ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
               {[1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
-                <div key={i} className="bg-card border border-border rounded-lg p-4 animate-pulse aspect-square flex flex-col">
+                <div
+                  key={i}
+                  className="bg-card border border-border rounded-lg p-4 animate-pulse aspect-square flex flex-col"
+                >
                   <div className="flex gap-2 mb-3">
-                    <div className="w-10 h-10 bg-secondary rounded-full shrink-0"></div>
+                    <div className="w-10 h-10 bg-secondary rounded-full shrink-0" />
                     <div className="flex-1 space-y-2">
-                      <div className="h-3 bg-secondary rounded w-3/4"></div>
-                      <div className="h-3 bg-secondary rounded w-1/2"></div>
+                      <div className="h-3 bg-secondary rounded w-3/4" />
+                      <div className="h-3 bg-secondary rounded w-1/2" />
                     </div>
                   </div>
                   <div className="flex-1 space-y-3">
-                    <div className="h-3 bg-secondary rounded w-full"></div>
-                    <div className="h-3 bg-secondary rounded w-5/6"></div>
-                    <div className="h-3 bg-secondary rounded w-4/6"></div>
-                    <div className="h-8 bg-secondary rounded w-full mt-auto"></div>
+                    <div className="h-3 bg-secondary rounded w-full" />
+                    <div className="h-3 bg-secondary rounded w-5/6" />
+                    <div className="h-3 bg-secondary rounded w-4/6" />
+                    <div className="h-8 bg-secondary rounded w-full mt-auto" />
                   </div>
                 </div>
               ))}
@@ -408,15 +469,19 @@ export default function ExplorePage() {
                   />
                 </svg>
                 <h3 className="text-xl font-semibold mb-2">No loans found</h3>
-                <p>Try adjusting your filters or check back later for new opportunities.</p>
+                <p>
+                  Try adjusting your filters or check back later for new
+                  opportunities.
+                </p>
               </div>
             </Card>
           ) : (
             <>
               <div className="mb-4 text-sm text-muted-foreground">
-                Showing {filteredLoans.length} loan{filteredLoans.length !== 1 ? 's' : ''}
+                Showing {filteredLoans.length} loan
+                {filteredLoans.length !== 1 ? "s" : ""}
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 justify-items-center">
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 justify-items-center">
                 {filteredLoans.map((loan) => (
                   <div
                     key={loan.id}
@@ -424,14 +489,16 @@ export default function ExplorePage() {
                   >
                     {/* Gradient border effect */}
                     <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-primary/20 via-transparent to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100 pointer-events-none" />
-                    
+
                     <div className="relative space-y-5">
                       {/* Header */}
                       <div className="flex items-start justify-between">
                         <div className="flex items-center gap-3">
                           <Avatar className="h-12 w-12 border-2 border-primary/20">
                             <AvatarFallback className="bg-secondary text-primary font-semibold">
-                              {loan.borrower.username.charAt(0).toUpperCase()}
+                              {loan.borrower.username
+                                .charAt(0)
+                                .toUpperCase()}
                             </AvatarFallback>
                           </Avatar>
                           <div>
@@ -440,30 +507,46 @@ export default function ExplorePage() {
                                 YOUR LOAN
                               </Badge>
                             )}
-                            <h3 className="font-semibold text-foreground text-base">{loan.borrower.username}</h3>
+                            <h3 className="font-semibold text-foreground text-base">
+                              {loan.borrower.username}
+                            </h3>
                           </div>
                         </div>
                         <div className="flex items-center gap-1 text-primary">
                           <Star className="h-4 w-4 fill-primary" />
-                          <span className="text-sm font-medium">{loan.borrower.reputation}</span>
+                          <span className="text-sm font-medium">
+                            {loan.borrower.reputation}
+                          </span>
                         </div>
                       </div>
 
                       {/* Loan Details */}
                       <div className="space-y-3.5">
                         <div>
-                          <p className="text-xs text-muted-foreground mb-1 uppercase tracking-wide">Amount</p>
-                          <p className="text-2xl font-bold text-foreground">{loan.amount}Wei</p>
+                          <p className="text-xs text-muted-foreground mb-1 uppercase tracking-wide">
+                            Amount
+                          </p>
+                          <p className="text-2xl font-bold text-foreground">
+                            {loan.amount} Wei
+                          </p>
                         </div>
 
                         <div className="grid grid-cols-2 gap-3">
                           <div>
-                            <p className="text-xs text-muted-foreground mb-1 uppercase tracking-wide">Interest</p>
-                            <p className="text-sm font-semibold text-primary">{loan.interestRatePercent.toFixed(2)}% APR</p>
+                            <p className="text-xs text-muted-foreground mb-1 uppercase tracking-wide">
+                              Interest
+                            </p>
+                            <p className="text-sm font-semibold text-primary">
+                              {loan.interestRatePercent.toFixed(2)}% APR
+                            </p>
                           </div>
                           <div>
-                            <p className="text-xs text-muted-foreground mb-1 uppercase tracking-wide">Duration</p>
-                            <p className="text-sm font-semibold text-foreground">{loan.durationInDays.toFixed(0)} days</p>
+                            <p className="text-xs text-muted-foreground mb-1 uppercase tracking-wide">
+                              Duration
+                            </p>
+                            <p className="text-sm font-semibold text-foreground">
+                              {loan.durationInDays.toFixed(0)} days
+                            </p>
                           </div>
                         </div>
                       </div>
@@ -472,22 +555,24 @@ export default function ExplorePage() {
                       <div className="pt-3 border-t border-border/50 space-y-3">
                         {loan.isOwnLoan ? (
                           <div>
-                            <p className="text-xs text-muted-foreground mb-1.5 uppercase tracking-wide">Status</p>
-                            <Badge 
-                              className={`
-                                font-semibold px-3 py-1
-                                ${loan.status === "ACTIVE" 
-                                  ? "bg-primary/15 text-primary border-primary/30 shadow-glow" 
+                            <p className="text-xs text-muted-foreground mb-1.5 uppercase tracking-wide">
+                              Status
+                            </p>
+                            <Badge
+                              className={`font-semibold px-3 py-1 ${
+                                loan.status === "ACTIVE"
+                                  ? "bg-primary/15 text-primary border-primary/30 shadow-glow"
                                   : "bg-secondary text-secondary-foreground border-border"
-                                }
-                              `}
+                              }`}
                             >
                               {loan.status}
                             </Badge>
                           </div>
                         ) : (
                           <div>
-                            <p className="text-xs text-muted-foreground mb-1.5 uppercase tracking-wide">Your Profit</p>
+                            <p className="text-xs text-muted-foreground mb-1.5 uppercase tracking-wide">
+                              Your Profit
+                            </p>
                             <p className="text-sm font-semibold text-green-500">
                               +{loan.profit.toFixed(4)} ETH
                             </p>
@@ -495,10 +580,19 @@ export default function ExplorePage() {
                         )}
 
                         <div>
-                          <p className="text-xs text-muted-foreground mb-1 uppercase tracking-wide">Collateral</p>
+                          <p className="text-xs text-muted-foreground mb-1 uppercase tracking-wide">
+                            Collateral
+                          </p>
                           <div className="flex items-baseline gap-2">
-                            <p className="text-sm font-semibold text-foreground">{loan.collateralType}</p>
-                            <p className="text-xs text-muted-foreground">{(parseFloat(loan.collateralValue) / 1e18).toFixed(4)} ETH</p>
+                            <p className="text-sm font-semibold text-foreground">
+                              {loan.collateralType}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              {(
+                                parseFloat(loan.collateralValue) / 1e18
+                              ).toFixed(4)}{" "}
+                              ETH
+                            </p>
                           </div>
                         </div>
                       </div>
