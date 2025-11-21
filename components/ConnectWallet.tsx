@@ -141,9 +141,9 @@ export default function WalletConnectButton({ onConnect }: { onConnect?: (data: 
             description: `Welcome ${connectionData.username}!`,
           });
           
-          // Redirect to home page after 1 second
+          // Redirect to explore page after 1 second
           setTimeout(() => {
-            router.push("/home");
+            router.push("/home/explore");
           }, 1000);
           
           setIsModalOpen(false);
@@ -182,9 +182,9 @@ export default function WalletConnectButton({ onConnect }: { onConnect?: (data: 
             description: `Welcome back, ${data.user.username}!`,
           });
           
-          // Redirect to home page after 1 second
+          // Redirect to explore page after 1 second
           setTimeout(() => {
-            router.push("/home");
+            router.push("/home/explore");
           }, 1000);
           
           setIsModalOpen(false);

@@ -39,6 +39,7 @@ model Loan {
   collateralType    String      // NFT, ERC20, etc.
   collateralId      String      // Token ID or contract address
   collateralValue   String      // Estimated value in wei
+  collateralImageUrl String?    // NFT image URL for display
   ltvRatio          Float       @default(0.8) // Loan-to-Value ratio (max 80%)
   
   status            LoanStatus  @default(ACTIVE)
@@ -75,6 +76,7 @@ model Collateral {
   contractAddress   String
   tokenId           String?  // For NFTs
   amount            String?  // For tokens
+  imageUrl          String?  // NFT/Token image URL for display
   owner             String
   isLocked          Boolean  @default(false)
   lockedInLoan      String?  // Loan ID if locked

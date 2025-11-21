@@ -17,7 +17,10 @@ if (!LENDVAULT_CONTRACT_ADDRESS) {
 const LENDVAULT_ABI = [
   "function fundLoanOffer(uint256 _offerId) external payable",
   "function getLoanOffer(uint256 _offerId) external view returns (tuple(uint256 offerId, address borrower, address nftContract, uint256 tokenId, uint256 requestedAmount, uint256 interestRate, uint256 duration, uint256 collateralValue, bool isActive, bool isFilled, uint256 createdAt))",
-  "event LoanFunded(uint256 indexed loanId, uint256 indexed offerId, address indexed lender, address borrower, uint256 amount)"
+  "function liquidateLoan(uint256 _loanId) external",
+  "function getLoan(uint256 _loanId) external view returns (tuple(uint256 loanId, uint256 offerId, address borrower, address lender, address nftContract, uint256 tokenId, uint256 loanAmount, uint256 interestRate, uint256 startTime, uint256 duration, uint256 dueDate, uint8 status))",
+  "event LoanFunded(uint256 indexed loanId, uint256 indexed offerId, address indexed lender, address borrower, uint256 amount)",
+  "event LoanLiquidated(uint256 indexed loanId, address indexed lender, address nftContract, uint256 tokenId)"
 ];
 
 interface LoanOffer {
@@ -33,6 +36,7 @@ interface LoanOffer {
   collateralType: string;
   collateralId: string;
   collateralValue: string;
+  collateralImageUrl?: string | null;
   ltvRatio: number;
   status: string;
   dueDate: string;
@@ -502,6 +506,18 @@ export function InvestModal({ loan, onClose, onSuccess, currentUserAddress }: In
           {/* Collateral Info */}
           <div className="bg-blue-500/5 border border-blue-500/20 rounded-lg p-4">
             <h4 className="text-sm font-semibold text-foreground mb-3">Collateral Details</h4>
+            
+            {/* Collateral Image */}
+            {loan.collateralImageUrl && (
+              <div className="mb-4 rounded-lg overflow-hidden border border-border">
+                <img
+                  src={loan.collateralImageUrl}
+                  alt={`${loan.collateralType} #${loan.collateralId}`}
+                  className="w-full h-48 object-cover"
+                />
+              </div>
+            )}
+            
             <div className="space-y-2 text-sm">
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Type:</span>

@@ -14,6 +14,7 @@ export async function POST(request: NextRequest) {
       collateralType,
       collateralId,
       collateralValue,
+      collateralImageUrl, // NFT image URL
       collateralContractAddress,
       network,
       dueDate,
@@ -135,6 +136,7 @@ export async function POST(request: NextRequest) {
         collateralType: collateralType || "NFT",
         collateralId: collateralId,
         collateralValue: collateralValue,
+        collateralImageUrl: collateralImageUrl || null, // NFT image URL
         ltvRatio: ltvRatio,
         status: "ACTIVE", // Loan offer is active, waiting for lender
         dueDate: new Date(dueDate),
@@ -150,6 +152,7 @@ export async function POST(request: NextRequest) {
         type: collateralType || "NFT",
         contractAddress: collateralContractAddress,
         tokenId: collateralId,
+        imageUrl: collateralImageUrl || null, // NFT image URL
         owner: borrowerId,
         isLocked: true,
         lockedInLoan: loan.id,

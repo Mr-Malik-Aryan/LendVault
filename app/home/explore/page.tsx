@@ -7,6 +7,7 @@ import { Sidebar } from "@/components/Sidebar";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { ethers } from "ethers";
 import {
   Select,
   SelectContent,
@@ -16,7 +17,7 @@ import {
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { Star } from "lucide-react";
+import { Star, Loader } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { InvestModal } from "@/components/Investment";
 
@@ -30,12 +31,14 @@ interface Loan {
   collateralType: string;
   collateralId: string;
   collateralValue: string;
+  collateralImageUrl?: string | null;
   status: string;
   dueDate: string;
   createdAt: string;
   txHash: string;
   contractAddress: string;
   offerId: string | null;
+  loanId: string | null;
   ltvRatio: number;
   borrower: {
     id: string;
@@ -76,6 +79,7 @@ export default function ExplorePage() {
   // Investment modal state
   const [selectedLoan, setSelectedLoan] = useState<Loan | null>(null);
   const [showInvestModal, setShowInvestModal] = useState(false);
+  const [liquidatingLoanId, setLiquidatingLoanId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!loading && !isAuthenticated) {
@@ -264,6 +268,211 @@ export default function ExplorePage() {
     return loan.lender?.walletAddress?.toLowerCase() === user?.walletAddress?.toLowerCase();
   };
 
+  const isLoanOverdue = (loan: Loan) => {
+    const dueDate = new Date(loan.dueDate);
+    const now = new Date();
+    return now > dueDate && loan.status === "FUNDED";
+  };
+
+  const handleLiquidate = async (loan: Loan) => {
+    if (!isCurrentUserLender(loan)) {
+      toast.error("Only the lender can liquidate this loan");
+      return;
+    }
+
+    if (!isLoanOverdue(loan)) {
+      toast.error("This loan is not yet overdue");
+      return;
+    }
+
+    if (!loan.loanId) {
+      toast.error("Blockchain loan ID not found. This loan may not have been funded yet on the blockchain.");
+      console.error("Missing blockchain loan ID for loan:", {
+        databaseId: loan.id,
+        status: loan.status,
+        offerId: loan.offerId
+      });
+      return;
+    }
+
+    setLiquidatingLoanId(loan.id);
+
+    try {
+      // Check MetaMask
+      if (!window.ethereum) {
+        throw new Error("Please install MetaMask to liquidate");
+      }
+
+      toast.info("Connecting to wallet...");
+
+      const provider = new ethers.BrowserProvider(window.ethereum);
+      const signer = await provider.getSigner();
+
+      // Verify network (Sepolia)
+      const network = await provider.getNetwork();
+      const chainId = Number(network.chainId);
+
+      if (chainId !== 11155111) {
+        toast.error("Please switch to Sepolia testnet in MetaMask");
+        setLiquidatingLoanId(null);
+        return;
+      }
+
+      // Get contract address
+      const contractAddress = loan.contractAddress || process.env.NEXT_PUBLIC_LENDVAULT_CONTRACT_ADDRESS;
+      
+      if (!contractAddress) {
+        throw new Error("Contract address not available");
+      }
+
+      // Create contract instance
+      const LENDVAULT_ABI = [
+        "function liquidateLoan(uint256 _loanId) external",
+        "function getLoan(uint256 _loanId) external view returns (tuple(uint256 loanId, uint256 offerId, address borrower, address lender, address nftContract, uint256 tokenId, uint256 loanAmount, uint256 interestRate, uint256 startTime, uint256 duration, uint256 dueDate, uint8 status))",
+        "event LoanLiquidated(uint256 indexed loanId, address indexed lender, address nftContract, uint256 tokenId)"
+      ];
+
+      const lendVaultContract = new ethers.Contract(
+        contractAddress,
+        LENDVAULT_ABI,
+        signer
+      );
+
+      const blockchainLoanId = loan.loanId;
+
+      console.log("Attempting to liquidate loan:", {
+        databaseLoanId: loan.id,
+        blockchainLoanId: blockchainLoanId,
+        loanStatus: loan.status,
+        dueDate: loan.dueDate,
+        isOverdue: new Date() > new Date(loan.dueDate)
+      });
+
+      // Verify loan status on blockchain
+      toast.info("Verifying loan status on blockchain...");
+      
+      try {
+        const loanDetails = await lendVaultContract.getLoan(blockchainLoanId);
+        
+        console.log("Loan details from blockchain:", {
+          loanId: loanDetails.loanId.toString(),
+          borrower: loanDetails.borrower,
+          lender: loanDetails.lender,
+          dueDate: new Date(Number(loanDetails.dueDate) * 1000).toLocaleString(),
+          status: loanDetails.status,
+          statusType: typeof loanDetails.status,
+          statusNumber: Number(loanDetails.status)
+        });
+
+        // Status: 0 = Active, 1 = Repaid, 2 = Liquidated
+        // Convert status to number for comparison
+        const statusNum = Number(loanDetails.status);
+        
+        if (statusNum === 1) {
+          toast.error(`This loan has already been repaid`);
+          console.log("Loan status is REPAID (1)");
+          setLiquidatingLoanId(null);
+          return;
+        }
+        
+        if (statusNum === 2) {
+          toast.error(`This loan has already been liquidated`);
+          console.log("Loan status is LIQUIDATED (2)");
+          setLiquidatingLoanId(null);
+          return;
+        }
+        
+        if (statusNum !== 0) {
+          toast.error(`Cannot liquidate: Unexpected loan status (${statusNum})`);
+          console.error("Unexpected loan status:", statusNum);
+          setLiquidatingLoanId(null);
+          return;
+        }
+
+        // Check if overdue on blockchain
+        const now = Math.floor(Date.now() / 1000);
+        const dueDateTimestamp = Number(loanDetails.dueDate);
+        
+        if (now <= dueDateTimestamp) {
+          toast.error("This loan is not yet overdue on the blockchain");
+          setLiquidatingLoanId(null);
+          return;
+        }
+
+      } catch (error) {
+        console.error("Error fetching loan details:", error);
+        toast.error("Failed to verify loan on blockchain");
+        setLiquidatingLoanId(null);
+        return;
+      }
+
+      // Liquidate the loan
+      toast.info("Liquidating loan... Please confirm in MetaMask");
+
+      console.log("Liquidating loan with ID:", blockchainLoanId);
+
+      const liquidateTx = await lendVaultContract.liquidateLoan(blockchainLoanId);
+
+      toast.info("Transaction submitted! Waiting for confirmation...");
+      console.log("Transaction hash:", liquidateTx.hash);
+
+      // Wait for confirmation
+      const receipt = await liquidateTx.wait();
+
+      console.log("Loan liquidated successfully!");
+      console.log("Block number:", receipt.blockNumber);
+
+      toast.success("Loan liquidated successfully! NFT transferred to your wallet 🎉");
+
+      // Update database
+      try {
+        const updateResponse = await fetch('/api/loans/liquidate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            loanId: loan.id,
+            lenderAddress: user?.walletAddress,
+            txHash: receipt.hash
+          })
+        });
+
+        const updateData = await updateResponse.json();
+
+        if (!updateResponse.ok) {
+          console.warn("Database update failed:", updateData);
+          toast.warning("Loan liquidated on blockchain but database update failed");
+        } else {
+          toast.success("Database updated! You now own the collateral NFT.");
+        }
+      } catch (dbError) {
+        console.error("Database error:", dbError);
+        toast.warning("Loan liquidated but failed to update database");
+      }
+
+      // Refresh loans list
+      setTimeout(() => {
+        fetchLoans();
+      }, 2000);
+
+    } catch (err: any) {
+      console.error("Error liquidating loan:", err);
+
+      if (err.code === 4001) {
+        toast.error("Transaction rejected by user");
+      } else if (err.message?.includes("user rejected")) {
+        toast.error("Transaction rejected by user");
+      } else if (err.message?.includes("Loan not overdue")) {
+        toast.error("Cannot liquidate: loan is not yet overdue");
+      } else if (err.message?.includes("Only lender can liquidate")) {
+        toast.error("Only the lender can liquidate this loan");
+      } else {
+        toast.error(err.message || "Failed to liquidate loan");
+      }
+    } finally {
+      setLiquidatingLoanId(null);
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -434,12 +643,29 @@ export default function ExplorePage() {
                 {filteredLoans.map((loan) => (
                   <div
                     key={loan.id}
-                    className="group relative w-full rounded-2xl bg-gradient-to-br from-card via-card to-secondary p-6 shadow-card transition-all duration-300 hover:shadow-card-hover hover:scale-[1.02]"
+                    className="group relative w-full rounded-2xl overflow-hidden shadow-card transition-all duration-300 hover:shadow-card-hover hover:scale-[1.02]"
                   >
+                    {/* Background Image with Overlay */}
+                    {loan.collateralImageUrl && (
+                      <div className="absolute inset-0">
+                        <img
+                          src={loan.collateralImageUrl}
+                          alt={`${loan.collateralType} NFT`}
+                          className="w-full h-full object-cover"
+                        />
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/80 to-black/60 backdrop-blur-sm" />
+                      </div>
+                    )}
+                    
+                    {/* Fallback gradient if no image */}
+                    {!loan.collateralImageUrl && (
+                      <div className="absolute inset-0 bg-gradient-to-br from-card via-card to-secondary" />
+                    )}
+                    
                     {/* Gradient border effect */}
                     <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-primary/20 via-transparent to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100 pointer-events-none" />
                     
-                    <div className="relative space-y-5">
+                    <div className="relative p-6 space-y-5">
                       {/* Header */}
                       <div className="flex items-start justify-between">
                         <div className="flex items-center gap-3">
@@ -524,6 +750,23 @@ export default function ExplorePage() {
                           </div>
                         )}
 
+                        {/* Overdue Warning - Show for funded overdue loans */}
+                        {isLoanOverdue(loan) && (
+                          <div className="bg-destructive/10 border border-destructive/30 rounded-lg p-3">
+                            <div className="flex items-center gap-2">
+                              <svg className="w-4 h-4 text-destructive" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                              </svg>
+                              <div className="flex-1">
+                                <p className="text-xs font-semibold text-destructive">LOAN OVERDUE</p>
+                                <p className="text-xs text-destructive/80">
+                                  {isCurrentUserLender(loan) ? "You can now liquidate this loan" : "This loan is past due date"}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
                         {/* Profit - Only show for non-own loans that are ACTIVE */}
                         {!loan.isOwnLoan && loan.status === "ACTIVE" && (
                           <div>
@@ -546,13 +789,30 @@ export default function ExplorePage() {
                       {/* Action Button */}
                       {!loan.isOwnLoan && (
                         loan.status === "FUNDED" ? (
-                          <Button
-                            className="w-full h-9 mt-4"
-                            disabled
-                            variant="outline"
-                          >
-                            Funded
-                          </Button>
+                          isCurrentUserLender(loan) && isLoanOverdue(loan) ? (
+                            <Button
+                              className="w-full h-9 mt-4 bg-destructive hover:bg-destructive/90 text-destructive-foreground"
+                              onClick={() => handleLiquidate(loan)}
+                              disabled={liquidatingLoanId === loan.id}
+                            >
+                              {liquidatingLoanId === loan.id ? (
+                                <span className="flex items-center gap-2">
+                                  <Loader className="w-4 h-4 animate-spin" />
+                                  Liquidating...
+                                </span>
+                              ) : (
+                                "Liquidate Loan"
+                              )}
+                            </Button>
+                          ) : (
+                            <Button
+                              className="w-full h-9 mt-4"
+                              disabled
+                              variant="outline"
+                            >
+                              {isCurrentUserLender(loan) ? "Funded by You" : "Funded"}
+                            </Button>
+                          )
                         ) : loan.status === "ACTIVE" ? (
                           <Button
                             className="w-full h-9 mt-4"

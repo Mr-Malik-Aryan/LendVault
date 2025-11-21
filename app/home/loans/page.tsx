@@ -4,7 +4,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Sidebar } from "@/components/Sidebar";
-import { AlertCircle, Plus, X, Loader, CheckCircle } from "lucide-react";
+import { AlertCircle, Plus, X, Loader, CheckCircle,DockIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useNFTs } from "@/hooks/useNFTs";
 import { toast } from "sonner";
@@ -354,6 +354,7 @@ export default function LoansPage() {
         collateralType: "NFT",
         collateralId: selectedNFT.tokenId.toString(),
         collateralValue: collateralValueWeiForContract.toString(), // In Wei
+        collateralImageUrl: selectedNFT.image || null, // NFT image URL
         dueDate: dueDate.toISOString(),
         collateralContractAddress: selectedNFT.contractAddress,
         network: "sepolia",
@@ -655,7 +656,7 @@ export default function LoansPage() {
             </div>
           ) : loans.length === 0 ? (
             <div className="bg-card border border-border rounded-lg p-12 text-center">
-              <div className="text-6xl mb-4">📋</div>
+              
               <h2 className="text-2xl font-semibold text-foreground mb-2">No Loan Requests Yet</h2>
               <p className="text-muted-foreground mb-6">
                 You haven't created any loan requests yet. Click "Request Loan" to get started!

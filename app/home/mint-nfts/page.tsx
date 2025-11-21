@@ -5,14 +5,17 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
 import { Sidebar } from "@/components/Sidebar";
 import { Button } from "@/components/ui/button";
-import { AlertCircle, Loader, Upload } from "lucide-react";
+import { AlertCircle, Loader, Upload, CheckCircle } from "lucide-react";
 import { ethers } from "ethers";
 
 // Add these constants at the top
-const TESTNET_NFT_CONTRACT_ADDRESS = "0x3dFa911d14112fdbEA9a414Cc41F4C8613bD11a3";
+const TESTNET_NFT_CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_NFT_CONTRACT_ADDRESS || "";
 const TESTNET_NFT_ABI = [
-  "function safeMint(address to, string memory uri) public returns (uint256)",
-  "function owner() public view returns (address)",
+  "function safeMint(string memory uri) public returns (uint256)",
+  "function ownerOf(uint256 tokenId) public view returns (address)",
+  "function balanceOf(address owner) public view returns (uint256)",
+  "function tokenURI(uint256 tokenId) public view returns (string memory)",
+  "function supportsInterface(bytes4 interfaceId) public view returns (bool)",
 ];
 
 const PINATA_API_KEY = process.env.NEXT_PUBLIC_PINATA_API_KEY;
@@ -23,6 +26,17 @@ interface MintFormData {
   description: string;
   value: string;
   image: File | null;
+}
+
+// Transaction status states for minting
+enum MintStatus {
+  IDLE = "idle",
+  UPLOADING_IMAGE = "uploading_image",
+  UPLOADING_METADATA = "uploading_metadata",
+  MINTING = "minting",
+  CONFIRMING = "confirming",
+  SUCCESS = "success",
+  ERROR = "error"
 }
 
 export default function MintNFTPage() {
@@ -40,6 +54,11 @@ export default function MintNFTPage() {
   const [minting, setMinting] = useState(false);
   const [mintError, setMintError] = useState<string | null>(null);
   const [mintSuccess, setMintSuccess] = useState<string | null>(null);
+  
+  // Transaction state
+  const [mintStatus, setMintStatus] = useState<MintStatus>(MintStatus.IDLE);
+  const [txHash, setTxHash] = useState<string>("");
+  const [tokenId, setTokenId] = useState<string>("");
 
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
@@ -118,6 +137,9 @@ export default function MintNFTPage() {
     setMintError(null);
     setMintSuccess(null);
     setMinting(true);
+    setMintStatus(MintStatus.IDLE);
+    setTxHash("");
+    setTokenId("");
 
     try {
       // Validate form data
@@ -142,10 +164,12 @@ export default function MintNFTPage() {
       }
 
       // Step 1: Upload image to Pinata
+      setMintStatus(MintStatus.UPLOADING_IMAGE);
       console.log("Uploading image to Pinata...");
       const imageIpfsUrl = await uploadImageToPinata(mintFormData.image);
 
       // Step 2: Create and upload metadata to Pinata
+      setMintStatus(MintStatus.UPLOADING_METADATA);
       console.log("Creating metadata...");
       const metadata = {
         name: mintFormData.name,
@@ -163,31 +187,79 @@ export default function MintNFTPage() {
       console.log("Metadata uploaded:", metadataIpfsUrl);
 
       // Step 3: Mint NFT on contract
+      setMintStatus(MintStatus.MINTING);
       console.log("Minting NFT on blockchain...");
+      
+      if (!TESTNET_NFT_CONTRACT_ADDRESS) {
+        throw new Error("NFT contract address not configured. Please check your .env file.");
+      }
+
       const nftContract = new ethers.Contract(
         TESTNET_NFT_CONTRACT_ADDRESS,
         TESTNET_NFT_ABI,
         signer
       );
 
-      const tx = await nftContract.safeMint(userAddress, metadataIpfsUrl);
-      console.log("Transaction hash:", tx.hash);
+      // Mint the NFT (mints to msg.sender automatically)
+      console.log("Calling safeMint...");
+      const tx = await nftContract.safeMint(metadataIpfsUrl);
+      console.log("✓ Transaction sent:", tx.hash);
 
-      // Wait for confirmation
+      // Set transaction hash and wait for confirmation
+      setTxHash(tx.hash);
+      setMintStatus(MintStatus.CONFIRMING);
+      console.log("Waiting for confirmation...");
       const receipt = await tx.wait();
-      console.log("NFT minted successfully:", receipt);
+      console.log("✓ NFT minted successfully!");
 
-      setMintSuccess("NFT minted successfully!");
-      setMintFormData({ name: "", description: "", value: "", image: null });
-      setImagePreview(null);
+      // Extract token ID from receipt
+      try {
+        const transferEvent = receipt.logs
+          .map((log: any) => {
+            try {
+              return nftContract.interface.parseLog(log);
+            } catch {
+              return null;
+            }
+          })
+          .find((event: any) => event && event.name === "Transfer");
 
-      // Reset form after 2 seconds
+        if (transferEvent && transferEvent.args?.tokenId) {
+          setTokenId(transferEvent.args.tokenId.toString());
+        }
+      } catch (e) {
+        console.log("Could not extract token ID:", e);
+      }
+
+      setMintStatus(MintStatus.SUCCESS);
+      setMintSuccess("✅ NFT minted successfully!");
+      
+      // Reset form after 3 seconds
       setTimeout(() => {
         setMintSuccess(null);
-      }, 2000);
+        setMintFormData({ name: "", description: "", value: "", image: null });
+        setImagePreview(null);
+        setMintStatus(MintStatus.IDLE);
+        setTxHash("");
+        setTokenId("");
+      }, 3000);
     } catch (err: any) {
-      console.error("Mint error:", err);
-      setMintError(err.message || "Failed to mint NFT");
+      console.error("❌ Mint error:", err);
+      setMintStatus(MintStatus.ERROR);
+      
+      // Provide user-friendly error messages
+      let errorMessage = err.message || "Failed to mint NFT";
+      
+      // Check for common error patterns
+      if (err.code === "ACTION_REJECTED") {
+        errorMessage = "Transaction was rejected in MetaMask";
+      } else if (err.message?.includes("insufficient funds")) {
+        errorMessage = "Insufficient ETH balance for gas fees";
+      } else if (err.message?.includes("user rejected")) {
+        errorMessage = "You cancelled the transaction";
+      }
+      
+      setMintError(errorMessage);
     } finally {
       setMinting(false);
     }
@@ -198,6 +270,29 @@ export default function MintNFTPage() {
     setImagePreview(null);
     setMintError(null);
     setMintSuccess(null);
+    setMintStatus(MintStatus.IDLE);
+    setTxHash("");
+    setTokenId("");
+  };
+
+  // Get status message based on minting status
+  const getStatusMessage = () => {
+    switch (mintStatus) {
+      case MintStatus.UPLOADING_IMAGE:
+        return "Uploading image to IPFS...";
+      case MintStatus.UPLOADING_METADATA:
+        return "Uploading metadata to IPFS...";
+      case MintStatus.MINTING:
+        return "Minting NFT on blockchain...";
+      case MintStatus.CONFIRMING:
+        return "Waiting for blockchain confirmation...";
+      case MintStatus.SUCCESS:
+        return "NFT minted successfully!";
+      case MintStatus.ERROR:
+        return "Minting failed";
+      default:
+        return "Mint NFT";
+    }
   };
 
   if (authLoading) {
@@ -216,18 +311,47 @@ export default function MintNFTPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen flex justify-center bg-background">
       <Sidebar username={user?.username} />
       <main className="pl-20 md:pl-64 p-8">
-        <div className="max-w-2xl">
+        <div className="min-w-[400px] lg:w-5xl">
           <h1 className="text-4xl font-bold mb-8">
             <span className="text-foreground">Mint New </span>
             <span className="text-primary">NFT</span>
           </h1>
 
           {/* Mint NFT Form */}
-          <div className="bg-card border border-border rounded-xl p-8">
-            <form onSubmit={handleMintNFT} className="space-y-6">
+          <div className="bg-card border border-border rounded-xl overflow-hidden">
+            {/* Transaction Status Banner */}
+            {mintStatus !== MintStatus.IDLE && mintStatus !== MintStatus.ERROR && (
+              <div className="bg-primary/10 border-b border-primary/20 p-4">
+                <div className="flex items-center gap-3">
+                  {mintStatus === MintStatus.SUCCESS ? (
+                    <CheckCircle className="w-5 h-5 text-green-500 shrink-0" />
+                  ) : (
+                    <Loader className="w-5 h-5 animate-spin text-primary shrink-0" />
+                  )}
+                  <div className="flex-1">
+                    <p className="font-semibold text-foreground">{getStatusMessage()}</p>
+                    {txHash && (
+                      <a
+                        href={`https://sepolia.etherscan.io/tx/${txHash}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs text-primary hover:underline"
+                      >
+                        View on Etherscan →
+                      </a>
+                    )}
+                    {tokenId && (
+                      <p className="text-xs text-muted-foreground">Token ID: {tokenId}</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <form onSubmit={handleMintNFT} className="p-8 space-y-6">
               {/* Connected Wallet */}
               <div>
                 <label className="block text-sm font-medium text-foreground mb-2">
@@ -252,6 +376,7 @@ export default function MintNFTPage() {
                   className="w-full px-4 py-3 bg-background border border-input rounded-lg text-foreground focus:ring-2 focus:ring-ring outline-none transition"
                   placeholder="e.g., Rare Digital Art"
                   required
+                  disabled={minting}
                 />
               </div>
 
@@ -272,6 +397,7 @@ export default function MintNFTPage() {
                   placeholder="Describe your NFT..."
                   rows={4}
                   required
+                  disabled={minting}
                 />
               </div>
 
@@ -289,6 +415,7 @@ export default function MintNFTPage() {
                   className="w-full px-4 py-3 bg-background border border-input rounded-lg text-foreground focus:ring-2 focus:ring-ring outline-none transition"
                   placeholder="e.g., 1000000000000000000"
                   required
+                  disabled={minting}
                 />
                 <p className="text-xs text-muted-foreground mt-2">
                   Enter value in Wei (1 ETH = 10^18 Wei)
@@ -306,6 +433,7 @@ export default function MintNFTPage() {
                   onChange={handleImageChange}
                   className="w-full px-4 py-3 bg-background border border-input rounded-lg text-foreground cursor-pointer focus:ring-2 focus:ring-ring outline-none transition"
                   required
+                  disabled={minting}
                 />
               </div>
 
@@ -355,7 +483,7 @@ export default function MintNFTPage() {
                   {minting ? (
                     <span className="flex items-center gap-2">
                       <Loader className="w-4 h-4 animate-spin" />
-                      Minting...
+                      {getStatusMessage()}
                     </span>
                   ) : (
                     <span className="flex items-center gap-2">
@@ -369,6 +497,7 @@ export default function MintNFTPage() {
                   onClick={handleReset}
                   variant="outline"
                   className="flex-1 text-foreground border-border hover:bg-muted font-semibold py-3"
+                  disabled={minting}
                 >
                   Reset
                 </Button>
