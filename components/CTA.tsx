@@ -1,7 +1,20 @@
+"use client";
+
 import { Button } from "@/components/ui/button";
 import { ArrowRight, Sparkles } from "lucide-react";
+import Link from "next/link";
+import { useAuth } from "@/hooks/useAuth";
+import { toast } from "sonner";
 
 const CTA = () => {
+  const { isAuthenticated } = useAuth();
+
+  const handleGetStartedClick = (e: React.MouseEvent) => {
+    if (!isAuthenticated) {
+      e.preventDefault();
+      toast.error("Please connect your wallet first");
+    }
+  };
   return (
     <section className="py-20 px-4 sm:px-6 lg:px-8 relative overflow-hidden">
       {/* Background effects */}
@@ -25,13 +38,17 @@ const CTA = () => {
           </p>
 
           <div className="flex flex-wrap gap-4 justify-center pt-4">
-            <Button size="lg" className="bg-primary text-primary-foreground hover:bg-primary/90 shadow-nft-glow-lg group">
-              Get Started Now
-              <ArrowRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" />
-            </Button>
-            <Button size="lg" variant="outline" className="border-primary/30 text-foreground hover:bg-primary/10">
-              Learn More
-            </Button>
+            <Link href="/home/explore" onClick={handleGetStartedClick}>
+              <Button size="lg" className="bg-primary text-primary-foreground hover:bg-primary/90 shadow-nft-glow-lg group">
+                Get Started Now
+                <ArrowRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" />
+              </Button>
+            </Link>
+            <Link href="/learn-more">
+              <Button size="lg" variant="outline" className="border-primary/30 text-foreground hover:bg-primary/10">
+                Learn More
+              </Button>
+            </Link>
           </div>
         </div>
       </div>

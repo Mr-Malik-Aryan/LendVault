@@ -80,6 +80,10 @@ export function InvestModal({ loan, onClose, onSuccess, currentUserAddress }: In
   const dailyInterest = yearlyInterest / 365;
   const totalInterest = dailyInterest * durationDays;
   const totalReturn = loanAmountEth + totalInterest;
+  
+  // Calculate interest in Wei (convert using fixed-point arithmetic to avoid scientific notation)
+  const totalInterestWei = BigInt(Math.floor(totalInterest * 1e18));
+  const totalReturnWei = loanAmountWei + totalInterestWei;
 
   // Format Wei with commas
   const formatWei = (wei: string) => {
@@ -461,17 +465,17 @@ export function InvestModal({ loan, onClose, onSuccess, currentUserAddress }: In
                   {formatWei(loan.amount)} Wei
                 </p>
                 <p className="text-sm text-muted-foreground mt-1">
-                  ≈ {loanAmountEth.toFixed(4)} ETH
+                  ≈ {loanAmountEth.toExponential(4)} ETH
                 </p>
               </div>
 
               <div className="bg-green-500/5 border border-green-500/20 rounded-lg p-4">
                 <p className="text-xs text-muted-foreground mb-1">Expected Return</p>
-                <p className="text-2xl font-bold text-green-500">
-                  {totalReturn.toFixed(4)} ETH
+                <p className="text-2xl font-bold text-green-500 font-mono">
+                  {formatWei(totalReturnWei.toString())} Wei
                 </p>
                 <p className="text-sm text-muted-foreground mt-1">
-                  +{totalInterest.toFixed(4)} ETH profit
+                  ≈ {totalReturn.toExponential(4)} ETH
                 </p>
               </div>
             </div>
@@ -536,7 +540,7 @@ export function InvestModal({ loan, onClose, onSuccess, currentUserAddress }: In
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Value (ETH):</span>
                 <span className="text-foreground font-medium">
-                  ≈ {collateralValueEth.toFixed(4)} ETH
+                  ≈ {collateralValueEth.toExponential(4)} ETH
                 </span>
               </div>
             </div>
@@ -567,15 +571,23 @@ export function InvestModal({ loan, onClose, onSuccess, currentUserAddress }: In
             <div className="space-y-2 text-sm">
               <div className="flex justify-between">
                 <span className="text-muted-foreground">You send:</span>
-                <span className="text-foreground font-bold">{loanAmountEth.toFixed(4)} ETH</span>
+                <span className="text-foreground font-bold">{loanAmountEth.toExponential(4)} ETH</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">You receive (after {durationDays} days):</span>
-                <span className="text-green-500 font-bold">{totalReturn.toFixed(4)} ETH</span>
+                <span className="text-green-500 font-bold">{totalReturn.toExponential(4)} ETH</span>
               </div>
               <div className="flex justify-between text-xs pt-2 border-t border-border">
                 <span className="text-muted-foreground">Your profit:</span>
-                <span className="text-green-500 font-semibold">+{totalInterest.toFixed(4)} ETH ({((totalInterest / loanAmountEth) * 100).toFixed(2)}%)</span>
+                <span className="text-green-500 font-semibold">
+                  +{formatWei(totalInterestWei.toString())} Wei
+                </span>
+              </div>
+              <div className="flex justify-between text-xs">
+                <span className="text-muted-foreground">Profit (ETH):</span>
+                <span className="text-green-500 font-semibold">
+                  +{totalInterest.toExponential(4)} ETH ({((totalInterest / loanAmountEth) * 100).toFixed(2)}%)
+                </span>
               </div>
             </div>
           </div>
@@ -602,7 +614,7 @@ export function InvestModal({ loan, onClose, onSuccess, currentUserAddress }: In
                   {getStatusMessage() || "Processing..."}
                 </span>
               ) : (
-                `Fund ${loanAmountEth.toFixed(4)} ETH`
+                `Fund ${loanAmountEth.toExponential(4)} ETH`
               )}
             </Button>
           </div>

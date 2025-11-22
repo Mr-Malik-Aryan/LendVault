@@ -44,9 +44,8 @@ const FeaturedCollections = () => {
     }
   };
 
-  const formatAmount = (amountWei: string) => {
-    const eth = parseFloat(amountWei) / 1e18;
-    return eth.toFixed(4);
+  const formatWei = (wei: string) => {
+    return wei.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
   };
   if (loading) {
     return (
@@ -125,7 +124,7 @@ const FeaturedCollections = () => {
                   <div className="flex justify-between items-center pt-2 border-t border-border">
                     <div>
                       <div className="text-xs text-muted-foreground">Amount</div>
-                      <div className="font-semibold text-foreground">{formatAmount(loan.amount)} ETH</div>
+                      <div className="font-semibold text-foreground font-mono text-sm">{formatWei(loan.amount)} Wei</div>
                     </div>
                     <div className="text-right">
                       <div className="text-xs text-muted-foreground">Status</div>

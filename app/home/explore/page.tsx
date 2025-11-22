@@ -57,6 +57,7 @@ interface Loan {
   durationInDays: number;
   totalReturn: number;
   profit: number;
+  profitInWei: string;
   isOwnLoan: boolean;
 }
 
@@ -124,6 +125,7 @@ export default function ExplorePage() {
           const durationInDays = loan.duration / 86400;
           const totalReturn = amountInEth * (1 + (interestRatePercent / 100) * (durationInDays / 365));
           const profit = totalReturn - amountInEth;
+          const profitInWei = BigInt(Math.floor(profit * 1e18));
           
           return {
             ...loan,
@@ -132,6 +134,7 @@ export default function ExplorePage() {
             durationInDays,
             totalReturn,
             profit,
+            profitInWei: profitInWei.toString(),
             isOwnLoan: loan.borrowerId === user?.id,
           };
         });
@@ -262,6 +265,10 @@ export default function ExplorePage() {
 
   const formatWalletAddress = (address: string) => {
     return `${address.slice(0, 6)}...${address.slice(-4)}`;
+  };
+
+  const formatWei = (wei: string) => {
+    return wei.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
   };
 
   const isCurrentUserLender = (loan: Loan) => {
@@ -771,18 +778,21 @@ export default function ExplorePage() {
                         {!loan.isOwnLoan && loan.status === "ACTIVE" && (
                           <div>
                             <p className="text-xs text-muted-foreground mb-1.5 uppercase tracking-wide">Your Profit</p>
-                            <p className="text-sm font-semibold text-green-500">
-                              +{loan.profit.toFixed(4)} ETH
+                            <p className="text-sm font-semibold text-green-500 font-mono">
+                              +{formatWei(loan.profitInWei)} Wei
+                            </p>
+                            <p className="text-xs text-muted-foreground mt-0.5">
+                              ≈ {loan.profit.toExponential(4)} ETH
                             </p>
                           </div>
                         )}
 
                         <div>
                           <p className="text-xs text-muted-foreground mb-1 uppercase tracking-wide">Collateral</p>
-                          <div className="flex items-baseline gap-2">
-                            <p className="text-sm font-semibold text-foreground">{loan.collateralType}</p>
-                            <p className="text-xs text-muted-foreground">{(parseFloat(loan.collateralValue) / 1e18).toFixed(4)} ETH</p>
-                          </div>
+                          <p className="text-sm font-semibold text-foreground mb-1">{loan.collateralType}</p>
+                          <p className="text-xs font-mono text-foreground">
+                            {formatWei(loan.collateralValue)} Wei
+                          </p>
                         </div>
                       </div>
 
