@@ -188,6 +188,21 @@ export async function PATCH(request: NextRequest) {
 
     console.log(`[API /loans PATCH] Updated loan ${loanId}:`, updateData);
 
+    // If status is REPAID or LIQUIDATED, remove the collateral to allow reuse
+    if (status === "REPAID" || status === "LIQUIDATED") {
+      try {
+        await prisma.collateral.deleteMany({
+          where: {
+            lockedInLoan: loanId,
+          },
+        });
+        console.log(`[API /loans PATCH] Removed collateral for loan ${loanId}`);
+      } catch (collateralError) {
+        console.error(`[API /loans PATCH] Error removing collateral for loan ${loanId}:`, collateralError);
+        // Continue even if collateral removal fails - the loan status update is more important
+      }
+    }
+
     return Response.json({
       success: true,
       loan: updatedLoan,
