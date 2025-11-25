@@ -1,9 +1,4 @@
-import "dotenv/config";
-import { defineConfig } from "prisma/config";
+// This file is not needed - Prisma configuration is handled in prisma/schema.prisma
+// Keeping this file empty to avoid build errors
 
-export default defineConfig({
-  schema: "prisma/schema.prisma",
-  migrations: {
-    path: "prisma/migrations",
-  },
-});
+export {};
