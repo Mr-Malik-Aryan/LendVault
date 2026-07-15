@@ -1,5 +1,5 @@
 # LendVault
-
+## Developed as part of the requirements for the BITS F452: Blockchain Technology course
 ## About
 
 LendVault is a decentralized peer-to-peer lending platform built on Ethereum that allows users to use their NFTs as collateral to borrow ETH or lend ETH to earn attractive interest rates. The platform leverages blockchain smart contracts to ensure secure, transparent, and trustless lending transactions.
