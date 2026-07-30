@@ -106,6 +106,19 @@ export async function POST(request: NextRequest) {
       },
     });
 
+    // Remove the collateral record to allow the NFT to be reused as collateral
+    try {
+      await prisma.collateral.deleteMany({
+        where: {
+          lockedInLoan: loanId,
+        },
+      });
+      console.log(`[API /loans/liquidate] Removed collateral for loan ${loanId}`);
+    } catch (collateralError) {
+      console.error(`[API /loans/liquidate] Error removing collateral for loan ${loanId}:`, collateralError);
+      // Continue even if collateral removal fails - the loan status update is more important
+    }
+
     console.log("Loan liquidated successfully:", {
       loanId: updatedLoan.id,
       borrower: updatedLoan.borrower.walletAddress,
